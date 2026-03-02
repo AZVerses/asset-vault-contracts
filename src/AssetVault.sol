@@ -701,6 +701,9 @@ contract AssetVault is
         if (amount == 0) {
             revert ZeroAmount();
         }
+        if (fee >= amount) {
+            revert InvalidParameters();
+        }
         if (token == address(0)) {
             Address.sendValue(payable(to), amount - fee);
             if (fee > 0) {

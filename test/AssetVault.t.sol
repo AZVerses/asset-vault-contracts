@@ -903,6 +903,33 @@ contract AssetVaultTest is Test {
         );
     }
 
+    function test_RequestWithdraw_FeeMustBeLessThanAmount() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            12,
+            address(token1),
+            50e18,
+            50e18,
+            address(0x120),
+            false,
+            1200
+        );
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(operator);
+        vault.requestWithdraw(
+            12,
+            false,
+            data.validators,
+            data.action,
+            data.signatures,
+            data.nonce
+        );
+    }
+
     struct WithdrawTestData {
         ValidatorInfo[] validators;
         bytes[] signatures;
