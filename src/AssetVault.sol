@@ -217,6 +217,9 @@ contract AssetVault is
             if (validators[i].signer <= lastValidator) {
                 revert ValidatorsNotOrdered();
             }
+            if (validators[i].power == 0) {
+                revert InvalidParameters();
+            }
             totalPower += validators[i].power;
             lastValidator = validators[i].signer;
         }
