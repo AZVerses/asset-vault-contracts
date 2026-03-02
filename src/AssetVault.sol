@@ -183,6 +183,7 @@ contract AssetVault is
         uint256 _pendingWithdrawChallengePeriod
     ) public initializer {
         __Pausable_init();
+        __AccessControl_init();
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         pendingWithdrawChallengePeriod = _pendingWithdrawChallengePeriod;
     }
