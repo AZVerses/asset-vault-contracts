@@ -930,6 +930,38 @@ contract AssetVaultTest is Test {
         );
     }
 
+    function test_RequestWithdraw_RejectsAttachedETH() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            13,
+            address(token1),
+            50e18,
+            1e18,
+            address(0x130),
+            false,
+            1300
+        );
+
+        vm.deal(operator, 1 ether);
+        vm.prank(operator);
+        (bool success, ) = address(vault).call{value: 1 wei}(
+            abi.encodeWithSelector(
+                AssetVault.requestWithdraw.selector,
+                13,
+                false,
+                data.validators,
+                data.action,
+                data.signatures,
+                data.nonce
+            )
+        );
+
+        assertFalse(success);
+    }
+
     struct WithdrawTestData {
         ValidatorInfo[] validators;
         bytes[] signatures;

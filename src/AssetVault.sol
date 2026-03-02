@@ -315,7 +315,7 @@ contract AssetVault is
         WithdrawAction calldata action,
         bytes[] calldata validatorSignatures,
         uint256 nonce
-    ) external payable whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
+    ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
         RequestWithdrawLocalVars memory vars;
 
         _nonceUsedCheckAndSet(nonce);
