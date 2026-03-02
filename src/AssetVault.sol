@@ -99,9 +99,6 @@ contract AssetVault is
     mapping(address => TokenInfo) public supportedTokens;
 
     mapping(uint256 => Withdrawal) public withdrawals;
-
-    uint256[] public pendingWithdrawalIds;
-
     // After challenge period, the pending withdraw can be withdrawn unconditionally
     uint256 public pendingWithdrawChallengePeriod;
 
