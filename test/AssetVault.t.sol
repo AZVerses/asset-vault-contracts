@@ -859,6 +859,50 @@ contract AssetVaultTest is Test {
         vault.requestWithdraw(wrongId, false, data.validators, data.action, data.signatures, data.nonce);
     }
 
+    function test_RequestWithdraw_RequiresStrictTwoThirdsValidatorPower() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        ValidatorInfo[] memory strictValidators = new ValidatorInfo[](2);
+        strictValidators[0] = ValidatorInfo({signer: validator1, power: 4});
+        strictValidators[1] = ValidatorInfo({signer: validator2, power: 6});
+
+        vm.prank(admin);
+        vault.addValidators(strictValidators);
+
+        uint256 withdrawalId = 11;
+        uint256 nonce = 1100;
+        bytes32 digest = _createRequestWithdrawDigest(
+            withdrawalId,
+            address(token1),
+            50e18,
+            0,
+            address(0x110),
+            false,
+            nonce
+        );
+
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = _signDigest(digest, validator2Key);
+
+        vm.expectRevert(AssetVault.NotEnoughValidatorPower.selector);
+        vm.prank(operator);
+        vault.requestWithdraw(
+            withdrawalId,
+            false,
+            strictValidators,
+            WithdrawAction({
+                token: address(token1),
+                amount: 50e18,
+                fee: 0,
+                receiver: address(0x110)
+            }),
+            signatures,
+            nonce
+        );
+    }
+
     struct WithdrawTestData {
         ValidatorInfo[] validators;
         bytes[] signatures;

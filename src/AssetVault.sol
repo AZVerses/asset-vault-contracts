@@ -565,7 +565,7 @@ contract AssetVault is
                 }
             }
         }
-        if (power < (totalPower * 2) / 3) {
+        if (power * 3 < totalPower * 2) {
             revert NotEnoughValidatorPower();
         }
     }
