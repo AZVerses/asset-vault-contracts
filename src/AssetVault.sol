@@ -246,11 +246,7 @@ contract AssetVault is
                 continue;
             }
             fees[token] = 0;
-            if (token == address(0)) {
-                Address.sendValue(payable(to), fee);
-            } else {
-                _transfer(payable(to), token, fee, 0);
-            }
+            _transfer(payable(to), token, fee, 0);
         }
         emit FeesWithdrawn(to);
     }
