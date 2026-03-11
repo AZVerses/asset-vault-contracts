@@ -584,7 +584,9 @@ contract AssetVault is
         uint256 refillAmount = (hardCap *
             tokenInfo.refillRateMps *
             refillPeriod) / 1000000;
+        uint256 appliedRefillAmount = refillAmount;
         if (tokenInfo.usedWithdrawHotAmount < refillAmount) {
+            appliedRefillAmount = tokenInfo.usedWithdrawHotAmount;
             tokenInfo.usedWithdrawHotAmount = 0;
         } else {
             tokenInfo.usedWithdrawHotAmount -= refillAmount;
@@ -592,7 +594,7 @@ contract AssetVault is
         tokenInfo.lastRefillTimestamp = block.timestamp;
         emit WithdrawHotAmountRefilled(
             tokenInfo.token,
-            refillAmount,
+            appliedRefillAmount,
             tokenInfo.usedWithdrawHotAmount
         );
     }

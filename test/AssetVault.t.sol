@@ -357,6 +357,52 @@ contract AssetVaultTest is Test {
         assertEq(usedAfter2, 0);
     }
 
+    function test_RefillWithdrawHotAmount_EmitsAppliedAmountWhenUsageIsFullyCleared() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        uint256 id = 1;
+        uint256 withdrawAmount = 100e18;
+        address receiver = address(0x101);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(token1),
+            withdrawAmount,
+            0,
+            receiver,
+            false,
+            1040
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            id,
+            false,
+            data.validators,
+            data.action,
+            data.signatures,
+            data.nonce
+        );
+
+        implementationV2 = new AssetVaultV2();
+        vm.prank(upgradeRole);
+        vault.upgradeToAndCall(address(implementationV2), "");
+
+        AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
+
+        vm.warp(block.timestamp + 10000 days);
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.WithdrawHotAmountRefilled(address(token1), withdrawAmount, 0);
+        vaultV2.refillWithdrawHotAmount(address(token1));
+
+        (, , , uint256 lastRefillAfter, uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        assertEq(lastRefillAfter, block.timestamp);
+        assertEq(usedAfter, 0);
+    }
+
     function test_IncreaseUsedWithdrawHotAmount() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));
