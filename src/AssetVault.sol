@@ -25,8 +25,9 @@ import {
 
 struct TokenInfo {
     address token;
-    // when usedWithdrawHotAmount < hardCap (=totalLockedTokenAmount * hardCapRatioBps / 10000),
-    // pending mode will be activated
+    // When a withdrawal would make usedWithdrawHotAmount exceed
+    // hardCap (= totalLockedTokenAmount * hardCapRatioBps / 10000),
+    // pending mode will be activated.
     uint256 hardCapRatioBps;
     // Every second, the usedWithdrawHotAmount will be decreased by refillRateMps / 1000000 * hardCap
     uint256 refillRateMps;
