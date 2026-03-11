@@ -419,6 +419,59 @@ contract AssetVaultTest is Test {
         assertEq(usedAfter, 0);
     }
 
+    function test_RefillWithdrawHotAmount_DoesNothingWhileTokenPaused() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        uint256 id = 3;
+        uint256 withdrawAmount = 100e18;
+        address receiver = address(0x102);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(token1),
+            withdrawAmount,
+            0,
+            receiver,
+            false,
+            1042
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            id,
+            false,
+            data.validators,
+            data.action,
+            data.signatures,
+            data.nonce
+        );
+
+        implementationV2 = new AssetVaultV2();
+        vm.prank(upgradeRole);
+        vault.upgradeToAndCall(address(implementationV2), "");
+
+        AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
+
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, uint256 lastRefillBeforePause, uint256 usedBeforePause, ) =
+            vault.supportedTokens(address(token1));
+        assertGt(hardCapRatioBps, 0);
+        assertGt(refillRateMps, 0);
+
+        vm.prank(admin);
+        vault.toggleToken(address(token1), true);
+
+        vm.warp(block.timestamp + 100);
+        vaultV2.refillWithdrawHotAmount(address(token1));
+
+        (, , , uint256 lastRefillWhilePaused, uint256 usedWhilePaused, bool pausedWhilePaused) =
+            vault.supportedTokens(address(token1));
+        assertTrue(pausedWhilePaused);
+        assertEq(lastRefillWhilePaused, lastRefillBeforePause);
+        assertEq(usedWhilePaused, usedBeforePause);
+    }
+
     function test_IncreaseUsedWithdrawHotAmount() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));

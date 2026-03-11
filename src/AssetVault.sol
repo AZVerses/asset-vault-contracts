@@ -577,6 +577,9 @@ contract AssetVault is
 
     function _refillWithdrawHotAmount(address token) internal {
         TokenInfo storage tokenInfo = supportedTokens[token];
+        if (tokenInfo.paused) {
+            return;
+        }
         uint256 refillPeriod = block.timestamp - tokenInfo.lastRefillTimestamp;
         if (refillPeriod == 0) {
             return;
