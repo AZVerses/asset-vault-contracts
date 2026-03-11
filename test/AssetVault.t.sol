@@ -10,6 +10,22 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
+contract WithdrawalExecutionObserver {
+    AssetVault public vault;
+    uint256 public withdrawalId;
+    bool public executedDuringReceive;
+
+    constructor(AssetVault _vault, uint256 _withdrawalId) {
+        vault = _vault;
+        withdrawalId = _withdrawalId;
+    }
+
+    receive() external payable {
+        (, , bool executed, , , , , ) = vault.withdrawals(withdrawalId);
+        executedDuringReceive = executed;
+    }
+}
+
 contract AssetVaultTest is Test {
     AssetVault public vault;
     AssetVault public implementation;
@@ -474,6 +490,42 @@ contract AssetVaultTest is Test {
         assertFalse(pending);
         (, , , , uint256 usedAfter, ) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore + amount);
+    }
+
+    function test_NormalEthWithdraw_SetsExecutedBeforeReceiverCallback() public {
+        vm.deal(user, 10e18);
+        vm.prank(user);
+        (bool depositSuccess, ) = payable(address(vault)).call{value: 10e18}("");
+        require(depositSuccess, "ETH transfer failed");
+
+        uint256 id = 2;
+        uint256 amount = 5e18;
+        WithdrawalExecutionObserver receiver = new WithdrawalExecutionObserver(vault, id);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(0),
+            amount,
+            0,
+            address(receiver),
+            false,
+            1041
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            id,
+            false,
+            data.validators,
+            data.action,
+            data.signatures,
+            data.nonce
+        );
+
+        assertTrue(receiver.executedDuringReceive());
+        (, , bool executed, , , , , ) = vault.withdrawals(id);
+        assertTrue(executed);
+        assertEq(address(receiver).balance, amount);
     }
 
     function test_PendingWithdraw_Triggered() public {

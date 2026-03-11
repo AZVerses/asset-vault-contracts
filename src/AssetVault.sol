@@ -626,13 +626,13 @@ contract AssetVault is
         uint256 nonce
     ) internal {
         Withdrawal storage withdrawal = withdrawals[withdrawalId];
+        withdrawal.executed = true;
         _transfer(
             payable(withdrawal.receiver),
             withdrawal.token,
             withdrawal.amount,
             withdrawal.fee
         );
-        withdrawal.executed = true;
         emit WithdrawExecuted(
             withdrawalId,
             withdrawal.receiver,
