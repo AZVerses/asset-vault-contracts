@@ -10,6 +10,22 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
+contract WithdrawalExecutionObserver {
+    AssetVault public vault;
+    uint256 public withdrawalId;
+    bool public executedDuringReceive;
+
+    constructor(AssetVault _vault, uint256 _withdrawalId) {
+        vault = _vault;
+        withdrawalId = _withdrawalId;
+    }
+
+    receive() external payable {
+        (, , bool executed, , , , , ) = vault.withdrawals(withdrawalId);
+        executedDuringReceive = executed;
+    }
+}
+
 contract AssetVaultTest is Test {
     AssetVault public vault;
     AssetVault public implementation;
@@ -357,6 +373,105 @@ contract AssetVaultTest is Test {
         assertEq(usedAfter2, 0);
     }
 
+    function test_RefillWithdrawHotAmount_EmitsAppliedAmountWhenUsageIsFullyCleared() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        uint256 id = 1;
+        uint256 withdrawAmount = 100e18;
+        address receiver = address(0x101);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(token1),
+            withdrawAmount,
+            0,
+            receiver,
+            false,
+            1040
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            id,
+            false,
+            data.validators,
+            data.action,
+            data.signatures,
+            data.nonce
+        );
+
+        implementationV2 = new AssetVaultV2();
+        vm.prank(upgradeRole);
+        vault.upgradeToAndCall(address(implementationV2), "");
+
+        AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
+
+        vm.warp(block.timestamp + 10000 days);
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.WithdrawHotAmountRefilled(address(token1), withdrawAmount, 0);
+        vaultV2.refillWithdrawHotAmount(address(token1));
+
+        (, , , uint256 lastRefillAfter, uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        assertEq(lastRefillAfter, block.timestamp);
+        assertEq(usedAfter, 0);
+    }
+
+    function test_RefillWithdrawHotAmount_DoesNothingWhileTokenPaused() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        uint256 id = 3;
+        uint256 withdrawAmount = 100e18;
+        address receiver = address(0x102);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(token1),
+            withdrawAmount,
+            0,
+            receiver,
+            false,
+            1042
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            id,
+            false,
+            data.validators,
+            data.action,
+            data.signatures,
+            data.nonce
+        );
+
+        implementationV2 = new AssetVaultV2();
+        vm.prank(upgradeRole);
+        vault.upgradeToAndCall(address(implementationV2), "");
+
+        AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
+
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, uint256 lastRefillBeforePause, uint256 usedBeforePause, ) =
+            vault.supportedTokens(address(token1));
+        assertGt(hardCapRatioBps, 0);
+        assertGt(refillRateMps, 0);
+
+        vm.prank(admin);
+        vault.toggleToken(address(token1), true);
+
+        vm.warp(block.timestamp + 100);
+        vaultV2.refillWithdrawHotAmount(address(token1));
+
+        (, , , uint256 lastRefillWhilePaused, uint256 usedWhilePaused, bool pausedWhilePaused) =
+            vault.supportedTokens(address(token1));
+        assertTrue(pausedWhilePaused);
+        assertEq(lastRefillWhilePaused, lastRefillBeforePause);
+        assertEq(usedWhilePaused, usedBeforePause);
+    }
+
     function test_IncreaseUsedWithdrawHotAmount() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));
@@ -428,6 +543,42 @@ contract AssetVaultTest is Test {
         assertFalse(pending);
         (, , , , uint256 usedAfter, ) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore + amount);
+    }
+
+    function test_NormalEthWithdraw_SetsExecutedBeforeReceiverCallback() public {
+        vm.deal(user, 10e18);
+        vm.prank(user);
+        (bool depositSuccess, ) = payable(address(vault)).call{value: 10e18}("");
+        require(depositSuccess, "ETH transfer failed");
+
+        uint256 id = 2;
+        uint256 amount = 5e18;
+        WithdrawalExecutionObserver receiver = new WithdrawalExecutionObserver(vault, id);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(0),
+            amount,
+            0,
+            address(receiver),
+            false,
+            1041
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            id,
+            false,
+            data.validators,
+            data.action,
+            data.signatures,
+            data.nonce
+        );
+
+        assertTrue(receiver.executedDuringReceive());
+        (, , bool executed, , , , , ) = vault.withdrawals(id);
+        assertTrue(executed);
+        assertEq(address(receiver).balance, amount);
     }
 
     function test_PendingWithdraw_Triggered() public {

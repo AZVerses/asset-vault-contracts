@@ -25,8 +25,9 @@ import {
 
 struct TokenInfo {
     address token;
-    // when usedWithdrawHotAmount < hardCap (=totalLockedTokenAmount * hardCapRatioBps / 10000),
-    // pending mode will be activated
+    // When a withdrawal would make usedWithdrawHotAmount exceed
+    // hardCap (= totalLockedTokenAmount * hardCapRatioBps / 10000),
+    // pending mode will be activated.
     uint256 hardCapRatioBps;
     // Every second, the usedWithdrawHotAmount will be decreased by refillRateMps / 1000000 * hardCap
     uint256 refillRateMps;
@@ -576,6 +577,9 @@ contract AssetVault is
 
     function _refillWithdrawHotAmount(address token) internal {
         TokenInfo storage tokenInfo = supportedTokens[token];
+        if (tokenInfo.paused) {
+            return;
+        }
         uint256 refillPeriod = block.timestamp - tokenInfo.lastRefillTimestamp;
         if (refillPeriod == 0) {
             return;
@@ -584,7 +588,9 @@ contract AssetVault is
         uint256 refillAmount = (hardCap *
             tokenInfo.refillRateMps *
             refillPeriod) / 1000000;
+        uint256 appliedRefillAmount = refillAmount;
         if (tokenInfo.usedWithdrawHotAmount < refillAmount) {
+            appliedRefillAmount = tokenInfo.usedWithdrawHotAmount;
             tokenInfo.usedWithdrawHotAmount = 0;
         } else {
             tokenInfo.usedWithdrawHotAmount -= refillAmount;
@@ -592,7 +598,7 @@ contract AssetVault is
         tokenInfo.lastRefillTimestamp = block.timestamp;
         emit WithdrawHotAmountRefilled(
             tokenInfo.token,
-            refillAmount,
+            appliedRefillAmount,
             tokenInfo.usedWithdrawHotAmount
         );
     }
@@ -624,13 +630,13 @@ contract AssetVault is
         uint256 nonce
     ) internal {
         Withdrawal storage withdrawal = withdrawals[withdrawalId];
+        withdrawal.executed = true;
         _transfer(
             payable(withdrawal.receiver),
             withdrawal.token,
             withdrawal.amount,
             withdrawal.fee
         );
-        withdrawal.executed = true;
         emit WithdrawExecuted(
             withdrawalId,
             withdrawal.receiver,
