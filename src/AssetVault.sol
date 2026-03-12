@@ -290,6 +290,7 @@ contract AssetVault is
     ) external onlyRole(ADMIN_ROLE) {
         _ensureTokenValid(token);
         _validateTokenConfig(hardCapRatioBps, refillRateMps);
+        _refillWithdrawHotAmount(token);
         TokenInfo storage tokenInfo = supportedTokens[token];
         tokenInfo.hardCapRatioBps = hardCapRatioBps;
         tokenInfo.refillRateMps = refillRateMps;

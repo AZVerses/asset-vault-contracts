@@ -234,6 +234,53 @@ contract AssetVaultTest is Test {
         vault.updateToken(address(unsupported), 6000, 2000);
     }
 
+    function test_UpdateToken_RefillsUsageBeforeApplyingNewConfig() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        uint256 initialWithdrawalId = 14;
+        uint256 initialAmount = 100e18;
+
+        WithdrawTestData memory initialData = _prepareRequestWithdrawData(
+            initialWithdrawalId,
+            address(token1),
+            initialAmount,
+            0,
+            address(0x140),
+            false,
+            1400
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            initialWithdrawalId,
+            false,
+            initialData.validators,
+            initialData.action,
+            initialData.signatures,
+            initialData.nonce
+        );
+
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBeforeUpdate, ) =
+            vault.supportedTokens(address(token1));
+        assertEq(usedBeforeUpdate, initialAmount);
+
+        vm.warp(block.timestamp + 100);
+
+        vm.prank(admin);
+        vault.updateToken(address(token1), 5000, 1_000_000);
+
+        (, , , uint256 lastRefillTimestamp, uint256 usedAfterUpdate, ) = vault.supportedTokens(address(token1));
+        uint256 hardCap = (token1.balanceOf(address(vault)) * hardCapRatioBps) / 10000;
+        uint256 expectedRefillAmount = (hardCap * refillRateMps * 100) / 1_000_000;
+
+        assertEq(lastRefillTimestamp, block.timestamp);
+        assertEq(hardCap, 450e18);
+        assertEq(expectedRefillAmount, 45e18);
+        assertEq(usedAfterUpdate, usedBeforeUpdate - expectedRefillAmount);
+    }
+
     function test_Deposit_ERC20() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 100e18));
