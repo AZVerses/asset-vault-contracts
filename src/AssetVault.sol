@@ -501,11 +501,18 @@ contract AssetVault is
         for (uint256 i = 0; i < tokens.length; i++) {
             _ensureTokenValid(tokens[i]);
             TokenInfo storage tokenInfo = supportedTokens[tokens[i]];
-            _refillWithdrawHotAmount(tokens[i]);
+            emit WithdrawHotAmountRefilled(tokens[i], tokenInfo.usedWithdrawHotAmount, 0);
             tokenInfo.usedWithdrawHotAmount = 0;
             tokenInfo.lastRefillTimestamp = block.timestamp;
-            emit WithdrawHotAmountRefilled(tokens[i], 0, 0);
         }
+    }
+
+    function getHardCap(address token) public view returns (uint256) {
+        TokenInfo storage tokenInfo = supportedTokens[token];
+        uint256 balance = token == address(0)
+            ? address(this).balance
+            : IERC20(token).balanceOf(address(this));
+        return (balance * tokenInfo.hardCapRatioBps) / 10000;
     }
 
     // ================================ Internal Functions ================================
@@ -573,10 +580,7 @@ contract AssetVault is
         if (refillPeriod == 0) {
             return;
         }
-        uint256 balance = token == address(0)
-            ? address(this).balance
-            : IERC20(token).balanceOf(address(this));
-        uint256 hardCap = (balance * tokenInfo.hardCapRatioBps) / 10000;
+        uint256 hardCap = getHardCap(token);
         uint256 refillAmount = (hardCap *
             tokenInfo.refillRateMps *
             refillPeriod) / 1000000;
@@ -597,10 +601,7 @@ contract AssetVault is
         TokenInfo storage tokenInfo,
         uint256 amount
     ) internal returns (bool pendingTriggered) {
-        uint256 balance = tokenInfo.token == address(0)
-            ? address(this).balance
-            : IERC20(tokenInfo.token).balanceOf(address(this));
-        uint256 hardCap = (balance * tokenInfo.hardCapRatioBps) / 10000;
+        uint256 hardCap = getHardCap(tokenInfo.token);
         // hard cap exceeded
         if (tokenInfo.usedWithdrawHotAmount + amount > hardCap) {
             pendingTriggered = true;

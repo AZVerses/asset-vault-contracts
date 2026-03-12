@@ -1321,10 +1321,9 @@ contract AssetVaultTest is Test {
         assertGt(used2Before, 0);
 
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawHotAmountRefilled(address(token1), 0, 0);
-
+        emit AssetVault.WithdrawHotAmountRefilled(address(token1), used1Before, 0);
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawHotAmountRefilled(address(token2), 0, 0);
+        emit AssetVault.WithdrawHotAmountRefilled(address(token2), used2Before, 0);
 
         address[] memory tokens = new address[](2);
         tokens[0] = address(token1);
