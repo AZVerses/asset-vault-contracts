@@ -614,10 +614,9 @@ contract AssetVaultTest is Test {
         assertFalse(executed);
         assertEq(withdrawalAmount, amount);
 
-        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id, 1003);
         vm.expectRevert(AssetVault.ChallengePeriodNotExpired.selector);
         vm.prank(operator);
-        vault.executePendingWithdrawal(id, execValidators, execSignatures, 1003);
+        vault.executePendingWithdrawal(id);
     }
 
     function test_ForcePendingWithdraw() public {
@@ -652,10 +651,9 @@ contract AssetVaultTest is Test {
         assertTrue(pending);
         assertFalse(executed);
 
-        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id, 1005);
         vm.expectRevert(AssetVault.ChallengePeriodNotExpired.selector);
         vm.prank(operator);
-        vault.executePendingWithdrawal(id, execValidators, execSignatures, 1005);
+        vault.executePendingWithdrawal(id);
     }
 
     function test_PauseWithdraw_OnlyPendingNotExpired() public {
@@ -764,13 +762,11 @@ contract AssetVaultTest is Test {
 
         vm.warp(block.timestamp + CHALLENGE_PERIOD + 1);
 
-        (ValidatorInfo[] memory execValidators, bytes[] memory execSignatures) = _prepareExecuteWithdrawalData(id, 1012);
-
         vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, true, false, false, 1012);
+        emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, true, false, false, 0);
 
         vm.prank(operator);
-        vault.executePendingWithdrawal(id, execValidators, execSignatures, 1012);
+        vault.executePendingWithdrawal(id);
 
         assertEq(token1.balanceOf(receiver), amount - fee);
         assertEq(vault.fees(address(token1)), fee);

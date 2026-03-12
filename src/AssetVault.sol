@@ -418,22 +418,8 @@ contract AssetVault is
     }
 
     function executePendingWithdrawal(
-        uint256 withdrawalId,
-        ValidatorInfo[] calldata validators,
-        bytes[] calldata validatorSignatures,
-        uint256 nonce
-    ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
-        _nonceUsedCheckAndSet(nonce);
-        bytes32 digest = keccak256(
-            abi.encode(
-                "executePendingWithdrawal",
-                withdrawalId,
-                block.chainid,
-                address(this),
-                nonce
-            )
-        );
-        _verifyValidatorSignature(validators, digest, validatorSignatures);
+        uint256 withdrawalId
+    ) external whenNotPaused nonReentrant {
         _checkWithdrawalExists(withdrawalId, true);
         _checkWithdrawalNotExecuted(withdrawalId);
         Withdrawal storage withdrawal = withdrawals[withdrawalId];
@@ -445,7 +431,7 @@ contract AssetVault is
         if (block.timestamp < withdrawal.timestamp + pendingWithdrawChallengePeriod) {
             revert ChallengePeriodNotExpired();
         }
-        _executeWithdrawal(withdrawalId, true, false, false, nonce);
+        _executeWithdrawal(withdrawalId, true, false, false, 0);
     }
 
     // No matter the withdrawal is pending or not, paused or not, it will be executed when flushing
