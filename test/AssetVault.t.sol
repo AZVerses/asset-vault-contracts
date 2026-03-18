@@ -3,7 +3,7 @@ pragma solidity ^0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {AssetVault, ValidatorInfo, WithdrawAction, TokenInfo} from "../src/AssetVault.sol";
+import {AssetVault, ValidatorInfo, WithdrawAction} from "../src/AssetVault.sol";
 import {AssetVaultV2} from "./mock/AssetVaultV2.sol";
 import {MockERC20} from "./mock/MockERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -122,7 +122,7 @@ contract AssetVaultTest is Test {
         emit AssetVault.TokenAdded(address(newToken), 5000, 1000);
         vm.prank(tokenRole);
         vault.addToken(address(newToken), 5000, 1000);
-        (address tokenAddr, , , , , ) = vault.supportedTokens(address(newToken));
+        (address tokenAddr, , , , ) = vault.supportedTokens(address(newToken));
         assertTrue(tokenAddr != address(0));
     }
 
@@ -130,87 +130,6 @@ contract AssetVaultTest is Test {
         vm.expectRevert(AssetVault.TokenAlreadyExists.selector);
         vm.prank(tokenRole);
         vault.addToken(address(token1), 5000, 1000);
-    }
-
-    function test_PauseToken_OnlyAdmin() public {
-        vm.expectRevert();
-        vm.prank(user);
-        vault.toggleToken(address(token1), true);
-
-        vm.expectEmit(true, false, false, true);
-        emit AssetVault.TokenToggled(address(token1), true);
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-        (, , , , , bool paused) = vault.supportedTokens(address(token1));
-        assertTrue(paused);
-    }
-
-    function test_PauseToken_NotSupported_Reverts() public {
-        MockERC20 unsupported = new MockERC20("Unsupported", "U");
-        vm.expectRevert(AssetVault.TokenInvalid.selector);
-        vm.prank(admin);
-        vault.toggleToken(address(unsupported), true);
-    }
-
-    function test_PauseToken_AlreadyPaused_Reverts() public {
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-        
-        vm.expectRevert(AssetVault.TokenAlreadyInDesiredState.selector);
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-    }
-
-    function test_UnpauseToken_OnlyAdmin() public {
-        // First pause the token
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-        (, , , , , bool paused) = vault.supportedTokens(address(token1));
-        assertTrue(paused);
-
-        // Test that only admin can unpause
-        vm.expectRevert();
-        vm.prank(user);
-        vault.toggleToken(address(token1), false);
-
-        vm.expectEmit(true, false, false, true);
-        emit AssetVault.TokenToggled(address(token1), false);
-        vm.prank(admin);
-        vault.toggleToken(address(token1), false);
-        (, , , , , bool pausedAfter) = vault.supportedTokens(address(token1));
-        assertFalse(pausedAfter);
-    }
-
-    function test_UnpauseToken_NotSupported_Reverts() public {
-        MockERC20 unsupported = new MockERC20("Unsupported", "U");
-        vm.expectRevert(AssetVault.TokenInvalid.selector);
-        vm.prank(admin);
-        vault.toggleToken(address(unsupported), false);
-    }
-
-    function test_UnpauseToken_AlreadyUnpaused_Reverts() public {
-        // Token is already unpaused by default
-        vm.expectRevert(AssetVault.TokenAlreadyInDesiredState.selector);
-        vm.prank(admin);
-        vault.toggleToken(address(token1), false);
-    }
-
-    function test_ToggleToken_PauseAndUnpause() public {
-        // Test full cycle: unpaused -> paused -> unpaused
-        (, , , , , bool pausedBefore) = vault.supportedTokens(address(token1));
-        assertFalse(pausedBefore);
-
-        // Pause
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-        (, , , , , bool pausedAfterPause) = vault.supportedTokens(address(token1));
-        assertTrue(pausedAfterPause);
-
-        // Unpause
-        vm.prank(admin);
-        vault.toggleToken(address(token1), false);
-        (, , , , , bool pausedAfterUnpause) = vault.supportedTokens(address(token1));
-        assertFalse(pausedAfterUnpause);
     }
 
     function test_UpdateToken_OnlyAdmin() public {
@@ -222,7 +141,7 @@ contract AssetVaultTest is Test {
         emit AssetVault.TokenUpdated(address(token1), 6000, 2000);
         vm.prank(admin);
         vault.updateToken(address(token1), 6000, 2000);
-        (, uint256 hardCapRatioBps, uint256 refillRateMps, , , ) = vault.supportedTokens(address(token1));
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , ) = vault.supportedTokens(address(token1));
         assertEq(hardCapRatioBps, 6000);
         assertEq(refillRateMps, 2000);
     }
@@ -262,7 +181,7 @@ contract AssetVaultTest is Test {
             initialData.nonce
         );
 
-        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBeforeUpdate, ) =
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBeforeUpdate) =
             vault.supportedTokens(address(token1));
         assertEq(usedBeforeUpdate, initialAmount);
 
@@ -271,7 +190,7 @@ contract AssetVaultTest is Test {
         vm.prank(admin);
         vault.updateToken(address(token1), 5000, 1_000_000);
 
-        (, , , uint256 lastRefillTimestamp, uint256 usedAfterUpdate, ) = vault.supportedTokens(address(token1));
+        (, , , uint256 lastRefillTimestamp, uint256 usedAfterUpdate) = vault.supportedTokens(address(token1));
         uint256 hardCap = (token1.balanceOf(address(vault)) * hardCapRatioBps) / 10000;
         uint256 expectedRefillAmount = (hardCap * refillRateMps * 100) / 1_000_000;
 
@@ -391,7 +310,7 @@ contract AssetVaultTest is Test {
 
         AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
         
-        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBefore) = vault.supportedTokens(address(token1));
         
         uint256 balance = token1.balanceOf(address(vault));
         uint256 hardCap = (balance * hardCapRatioBps) / 10000;
@@ -402,7 +321,7 @@ contract AssetVaultTest is Test {
         vm.warp(block.timestamp + timePassed);
         vaultV2.refillWithdrawHotAmount(address(token1));
         
-        (, , , uint256 lastRefillAfter, uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , uint256 lastRefillAfter, uint256 usedAfter) = vault.supportedTokens(address(token1));
         
         uint256 expectedUsedAfter = usedBefore >= expectedRefillAmount ? usedBefore - expectedRefillAmount : 0;
         
@@ -415,7 +334,7 @@ contract AssetVaultTest is Test {
 
         vm.warp(block.timestamp + 10000 days);
         vaultV2.refillWithdrawHotAmount(address(token1));
-        (, , , uint256 lastRefillAfter2, uint256 usedAfter2, ) = vault.supportedTokens(address(token1));
+        (, , , uint256 lastRefillAfter2, uint256 usedAfter2) = vault.supportedTokens(address(token1));
         assertEq(lastRefillAfter2, block.timestamp);
         assertEq(usedAfter2, 0);
     }
@@ -461,62 +380,9 @@ contract AssetVaultTest is Test {
         emit AssetVault.WithdrawHotAmountRefilled(address(token1), withdrawAmount, 0);
         vaultV2.refillWithdrawHotAmount(address(token1));
 
-        (, , , uint256 lastRefillAfter, uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , uint256 lastRefillAfter, uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(lastRefillAfter, block.timestamp);
         assertEq(usedAfter, 0);
-    }
-
-    function test_RefillWithdrawHotAmount_DoesNothingWhileTokenPaused() public {
-        vm.startPrank(user);
-        assertTrue(token1.transfer(address(vault), 1000e18));
-        vm.stopPrank();
-
-        uint256 id = 3;
-        uint256 withdrawAmount = 100e18;
-        address receiver = address(0x102);
-
-        WithdrawTestData memory data = _prepareRequestWithdrawData(
-            id,
-            address(token1),
-            withdrawAmount,
-            0,
-            receiver,
-            false,
-            1042
-        );
-
-        vm.prank(operator);
-        vault.requestWithdraw(
-            id,
-            false,
-            data.validators,
-            data.action,
-            data.signatures,
-            data.nonce
-        );
-
-        implementationV2 = new AssetVaultV2();
-        vm.prank(upgradeRole);
-        vault.upgradeToAndCall(address(implementationV2), "");
-
-        AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
-
-        (, uint256 hardCapRatioBps, uint256 refillRateMps, uint256 lastRefillBeforePause, uint256 usedBeforePause, ) =
-            vault.supportedTokens(address(token1));
-        assertGt(hardCapRatioBps, 0);
-        assertGt(refillRateMps, 0);
-
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-
-        vm.warp(block.timestamp + 100);
-        vaultV2.refillWithdrawHotAmount(address(token1));
-
-        (, , , uint256 lastRefillWhilePaused, uint256 usedWhilePaused, bool pausedWhilePaused) =
-            vault.supportedTokens(address(token1));
-        assertTrue(pausedWhilePaused);
-        assertEq(lastRefillWhilePaused, lastRefillBeforePause);
-        assertEq(usedWhilePaused, usedBeforePause);
     }
 
     function test_IncreaseUsedWithdrawHotAmount() public {
@@ -529,18 +395,18 @@ contract AssetVaultTest is Test {
         vault.upgradeToAndCall(address(implementationV2), "");
 
         AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
-        (, , , , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         uint256 hardCap = (1000e18 * 5000) / 10000;
         uint256 smallAmount = hardCap / 2;
         bool forcePending = vaultV2.mockIncreaseUsedWithdrawHotAmount(address(token1), smallAmount);
         assertFalse(forcePending);
-        (, , , , uint256 usedAfter1, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter1) = vault.supportedTokens(address(token1));
         assertEq(usedAfter1, usedBefore + smallAmount);
 
         uint256 largeAmount = hardCap + 1;
         forcePending = vaultV2.mockIncreaseUsedWithdrawHotAmount(address(token1), largeAmount);
         assertTrue(forcePending);
-        (, , , , uint256 usedAfter2, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter2) = vault.supportedTokens(address(token1));
         assertEq(usedAfter2, usedBefore + smallAmount);
     }
 
@@ -576,7 +442,7 @@ contract AssetVaultTest is Test {
             1001
         );
 
-        (, , , , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
         emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, false, false, false, data.nonce);
 
@@ -588,7 +454,7 @@ contract AssetVaultTest is Test {
         (, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
         assertTrue(executed);
         assertFalse(pending);
-        (, , , , uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore + amount);
     }
 
@@ -647,14 +513,14 @@ contract AssetVaultTest is Test {
             false,
             1002
         );
-        (, , , , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
         emit AssetVault.WithdrawalAdded(id, address(token1), amount, 0, receiver, true, false, data.nonce);
 
         vm.prank(operator);
         vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
-        (, , , , uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore);
         (, bool pending, bool executed, uint256 withdrawalAmount, , , , ) = vault.withdrawals(id);
         assertTrue(pending);
@@ -685,14 +551,14 @@ contract AssetVaultTest is Test {
             1004
         );
 
-        (, , , , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
         emit AssetVault.WithdrawalAdded(id, address(token1), amount, 0, receiver, true, true, data.nonce);
 
         vm.prank(operator);
         vault.requestWithdraw(id, true, data.validators, data.action, data.signatures, data.nonce);
 
-        (, , , , uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore);
         (, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
         assertTrue(pending);
@@ -1509,8 +1375,8 @@ contract AssetVaultTest is Test {
         vm.prank(operator);
         vault.requestWithdraw(id2, false, data2.validators, data2.action, data2.signatures, data2.nonce);
 
-        (, , , , uint256 used1Before, ) = vault.supportedTokens(address(token1));
-        (, , , , uint256 used2Before, ) = vault.supportedTokens(address(token2));
+        (, , , , uint256 used1Before) = vault.supportedTokens(address(token1));
+        (, , , , uint256 used2Before) = vault.supportedTokens(address(token2));
         assertGt(used1Before, 0);
         assertGt(used2Before, 0);
 
@@ -1527,8 +1393,8 @@ contract AssetVaultTest is Test {
         vm.prank(operator);
         vault.batchResetWithdrawHotAmount(tokens, resetValidators, resetSignatures, 1029);
 
-        (, , , , uint256 used1After, ) = vault.supportedTokens(address(token1));
-        (, , , , uint256 used2After, ) = vault.supportedTokens(address(token2));
+        (, , , , uint256 used1After) = vault.supportedTokens(address(token1));
+        (, , , , uint256 used2After) = vault.supportedTokens(address(token2));
         assertEq(used1After, 0);
         assertEq(used2After, 0);
     }

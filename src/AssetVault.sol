@@ -35,8 +35,6 @@ struct TokenInfo {
     uint256 lastRefillTimestamp;
     // Every time user withdraw in fast mode, this amount will be deducted
     uint256 usedWithdrawHotAmount;
-    // When token is paused, no new withdrawal can be added
-    bool paused;
 }
 
 struct ValidatorInfo {
@@ -78,7 +76,6 @@ contract AssetVault is
     error ChallengePeriodNotExpired();
     error ChallengePeriodExpired();
     error WithdrawAlreadyInDesiredState();
-    error TokenAlreadyInDesiredState();
     error WithdrawalPaused();
     error WithdrawalMustBePending();
     error EmptyTokens();
@@ -116,7 +113,6 @@ contract AssetVault is
         uint256 hardCapRatioBps,
         uint256 refillRateMps
     );
-    event TokenToggled(address token, bool paused);
     event TokenUpdated(
         address token,
         uint256 hardCapRatioBps,
@@ -269,18 +265,6 @@ contract AssetVault is
         tokenInfo.hardCapRatioBps = hardCapRatioBps;
         tokenInfo.refillRateMps = refillRateMps;
         emit TokenAdded(token, hardCapRatioBps, refillRateMps);
-    }
-
-    function toggleToken(address token, bool pause) external onlyRole(ADMIN_ROLE) {
-        TokenInfo storage tokenInfo = supportedTokens[token];
-        if (tokenInfo.hardCapRatioBps == 0) {
-            revert TokenInvalid();
-        }
-        if (tokenInfo.paused == pause) {
-            revert TokenAlreadyInDesiredState();
-        }
-        tokenInfo.paused = pause;
-        emit TokenToggled(token, pause);
     }
 
     function updateToken(
@@ -564,9 +548,6 @@ contract AssetVault is
 
     function _refillWithdrawHotAmount(address token) internal {
         TokenInfo storage tokenInfo = supportedTokens[token];
-        if (tokenInfo.paused) {
-            return;
-        }
         uint256 refillPeriod = block.timestamp - tokenInfo.lastRefillTimestamp;
         if (refillPeriod == 0) {
             return;
@@ -639,8 +620,7 @@ contract AssetVault is
 
     function _ensureTokenValid(address token) internal view {
         TokenInfo storage tokenInfo = supportedTokens[token];
-        // not added or paused
-        if (tokenInfo.hardCapRatioBps == 0 || tokenInfo.paused) {
+        if (tokenInfo.hardCapRatioBps == 0) {
             revert TokenInvalid();
         }
     }
