@@ -101,6 +101,7 @@ contract AssetVault is
     uint256 public pendingWithdrawChallengePeriod;
 
     mapping(bytes32 => uint256) public availableValidators;
+    mapping(bytes32 => uint256) public validatorRequiredPowers;
 
     mapping(address => uint256) public fees;
 
@@ -161,8 +162,18 @@ contract AssetVault is
         uint256 nonce
     );
 
-    event ValidatorsAdded(bytes32 hash, uint256 count, uint256 totalPower);
+    event ValidatorsAdded(
+        bytes32 hash,
+        uint256 count,
+        uint256 totalPower,
+        uint256 requiredPower
+    );
     event ValidatorsRemoved(bytes32 hash, uint256 count);
+    event ValidatorRequiredPowerUpdated(
+        bytes32 hash,
+        uint256 oldRequiredPower,
+        uint256 newRequiredPower
+    );
 
     event PendingWithdrawChallengePeriodUpdated(
         uint256 oldValue,
@@ -202,7 +213,8 @@ contract AssetVault is
     }
 
     function addValidators(
-        ValidatorInfo[] calldata validators
+        ValidatorInfo[] calldata validators,
+        uint256 requiredPower
     ) external onlyRole(ADMIN_ROLE) {
         bytes32 validatorHash = keccak256(abi.encode(validators));
         if (availableValidators[validatorHash] != 0) {
@@ -220,8 +232,34 @@ contract AssetVault is
             totalPower += validators[i].power;
             lastValidator = validators[i].signer;
         }
+        _validateValidatorRequiredPower(requiredPower, totalPower);
         availableValidators[validatorHash] = totalPower;
-        emit ValidatorsAdded(validatorHash, validators.length, totalPower);
+        validatorRequiredPowers[validatorHash] = requiredPower;
+        emit ValidatorsAdded(
+            validatorHash,
+            validators.length,
+            totalPower,
+            requiredPower
+        );
+    }
+
+    function updateValidatorRequiredPower(
+        ValidatorInfo[] calldata validators,
+        uint256 newRequiredPower
+    ) external onlyRole(ADMIN_ROLE) {
+        bytes32 validatorHash = keccak256(abi.encode(validators));
+        uint256 totalPower = availableValidators[validatorHash];
+        if (totalPower == 0) {
+            revert ValidatorsNotSet();
+        }
+        _validateValidatorRequiredPower(newRequiredPower, totalPower);
+        uint256 oldRequiredPower = validatorRequiredPowers[validatorHash];
+        validatorRequiredPowers[validatorHash] = newRequiredPower;
+        emit ValidatorRequiredPowerUpdated(
+            validatorHash,
+            oldRequiredPower,
+            newRequiredPower
+        );
     }
 
     function removeValidators(
@@ -232,6 +270,7 @@ contract AssetVault is
             revert ValidatorsNotSet();
         }
         delete availableValidators[validatorHash];
+        delete validatorRequiredPowers[validatorHash];
         emit ValidatorsRemoved(validatorHash, validators.length);
     }
 
@@ -503,6 +542,19 @@ contract AssetVault is
         }
     }
 
+    function _validateValidatorRequiredPower(
+        uint256 requiredPower,
+        uint256 totalPower
+    ) internal pure {
+        if (
+            requiredPower == 0 ||
+            totalPower == 0 ||
+            requiredPower > totalPower
+        ) {
+            revert InvalidParameters();
+        }
+    }
+
     // validators must be sorted by address
     function _verifyValidatorSignature(
         ValidatorInfo[] calldata validators,
@@ -514,6 +566,7 @@ contract AssetVault is
         if (totalPower == 0) {
             revert InvalidValidators();
         }
+        uint256 requiredPower = validatorRequiredPowers[validatorHash];
         uint256 power = 0;
         uint256 validatorIndex = 0;
         bytes32 validatorDigest = MessageHashUtils.toEthSignedMessageHash(
@@ -541,7 +594,7 @@ contract AssetVault is
                 }
             }
         }
-        if (power * 3 < totalPower * 2) {
+        if (power < requiredPower) {
             revert NotEnoughValidatorPower();
         }
     }

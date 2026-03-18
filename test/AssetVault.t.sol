@@ -96,7 +96,7 @@ contract AssetVaultTest is Test {
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
 
         vm.prank(admin);
-        vault.addValidators(validators);
+        vault.addValidators(validators, 40);
 
         token1.mint(user, 10000e18);
         token2.mint(user, 10000e18);
@@ -109,6 +109,14 @@ contract AssetVaultTest is Test {
         assertTrue(vault.hasRole(PAUSE_ROLE, pauseRole));
         assertTrue(vault.hasRole(UPGRADE_ROLE, upgradeRole));
         assertEq(vault.pendingWithdrawChallengePeriod(), CHALLENGE_PERIOD);
+
+        ValidatorInfo[] memory validators = new ValidatorInfo[](3);
+        validators[0] = ValidatorInfo({signer: validator1, power: 10});
+        validators[1] = ValidatorInfo({signer: validator2, power: 20});
+        validators[2] = ValidatorInfo({signer: validator3, power: 30});
+        bytes32 validatorHash = keccak256(abi.encode(validators));
+        assertEq(vault.availableValidators(validatorHash), 60);
+        assertEq(vault.validatorRequiredPowers(validatorHash), 40);
     }
 
     function test_AddToken_OnlyTokenRole() public {
@@ -226,10 +234,10 @@ contract AssetVaultTest is Test {
 
         vm.expectRevert();
         vm.prank(user);
-        vault.addValidators(newValidators);
+        vault.addValidators(newValidators, 14);
 
         vm.prank(admin);
-        vault.addValidators(newValidators);
+        vault.addValidators(newValidators, 14);
     }
 
     function test_AddValidators_NotOrdered_Reverts() public {
@@ -239,7 +247,7 @@ contract AssetVaultTest is Test {
 
         vm.expectRevert(AssetVault.ValidatorsNotOrdered.selector);
         vm.prank(admin);
-        vault.addValidators(invalidValidators);
+        vault.addValidators(invalidValidators, 14);
     }
 
     function test_AddValidators_AlreadySet_Reverts() public {
@@ -250,7 +258,21 @@ contract AssetVaultTest is Test {
 
         vm.expectRevert(AssetVault.ValidatorsAlreadySet.selector);
         vm.prank(admin);
-        vault.addValidators(validators);
+        vault.addValidators(validators, 40);
+    }
+
+    function test_AddValidators_InvalidRequiredPower_Reverts() public {
+        ValidatorInfo[] memory validators = new ValidatorInfo[](2);
+        validators[0] = ValidatorInfo({signer: address(0x20), power: 5});
+        validators[1] = ValidatorInfo({signer: address(0x21), power: 15});
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.addValidators(validators, 0);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.addValidators(validators, 21);
     }
 
     function test_RemoveValidators_OnlyAdmin() public {
@@ -280,6 +302,43 @@ contract AssetVaultTest is Test {
         vm.prank(admin);
         vault.updatePendingWithdrawChallengePeriod(2 days);
         assertEq(vault.pendingWithdrawChallengePeriod(), 2 days);
+    }
+
+    function test_UpdateValidatorRequiredPower_OnlyAdmin() public {
+        ValidatorInfo[] memory validators = new ValidatorInfo[](3);
+        validators[0] = ValidatorInfo({signer: validator1, power: 10});
+        validators[1] = ValidatorInfo({signer: validator2, power: 20});
+        validators[2] = ValidatorInfo({signer: validator3, power: 30});
+        bytes32 validatorHash = keccak256(abi.encode(validators));
+
+        vm.expectRevert();
+        vm.prank(user);
+        vault.updateValidatorRequiredPower(validators, 45);
+
+        vm.expectEmit(false, false, false, true);
+        emit AssetVault.ValidatorRequiredPowerUpdated(validatorHash, 40, 45);
+        vm.prank(admin);
+        vault.updateValidatorRequiredPower(validators, 45);
+        assertEq(vault.validatorRequiredPowers(validatorHash), 45);
+    }
+
+    function test_UpdateValidatorRequiredPower_InvalidParameters_Reverts() public {
+        ValidatorInfo[] memory validators = new ValidatorInfo[](3);
+        validators[0] = ValidatorInfo({signer: validator1, power: 10});
+        validators[1] = ValidatorInfo({signer: validator2, power: 20});
+        validators[2] = ValidatorInfo({signer: validator3, power: 30});
+
+        vm.expectRevert(AssetVault.ValidatorsNotSet.selector);
+        vm.prank(admin);
+        vault.updateValidatorRequiredPower(new ValidatorInfo[](0), 1);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.updateValidatorRequiredPower(validators, 0);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.updateValidatorRequiredPower(validators, 61);
     }
 
     function test_RefillWithdrawHotAmount() public {
@@ -919,7 +978,7 @@ contract AssetVaultTest is Test {
         vault.requestWithdraw(wrongId, false, data.validators, data.action, data.signatures, data.nonce);
     }
 
-    function test_RequestWithdraw_RequiresStrictTwoThirdsValidatorPower() public {
+    function test_RequestWithdraw_RequiresValidatorRequiredPower() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
@@ -929,7 +988,7 @@ contract AssetVaultTest is Test {
         strictValidators[1] = ValidatorInfo({signer: validator2, power: 6});
 
         vm.prank(admin);
-        vault.addValidators(strictValidators);
+        vault.addValidators(strictValidators, 7);
 
         uint256 withdrawalId = 11;
         uint256 nonce = 1100;
@@ -961,6 +1020,139 @@ contract AssetVaultTest is Test {
             signatures,
             nonce
         );
+    }
+
+    function test_RequestWithdraw_UsesUpdatedValidatorRequiredPower() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        ValidatorInfo[] memory strictValidators = new ValidatorInfo[](2);
+        strictValidators[0] = ValidatorInfo({signer: validator1, power: 4});
+        strictValidators[1] = ValidatorInfo({signer: validator2, power: 6});
+
+        vm.prank(admin);
+        vault.addValidators(strictValidators, 7);
+
+        vm.prank(admin);
+        vault.updateValidatorRequiredPower(strictValidators, 6);
+
+        uint256 withdrawalId = 15;
+        uint256 nonce = 1500;
+        address receiver = address(0x150);
+        bytes32 digest = _createRequestWithdrawDigest(
+            withdrawalId,
+            address(token1),
+            50e18,
+            0,
+            receiver,
+            false,
+            nonce
+        );
+
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = _signDigest(digest, validator2Key);
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            withdrawalId,
+            false,
+            strictValidators,
+            WithdrawAction({
+                token: address(token1),
+                amount: 50e18,
+                fee: 0,
+                receiver: receiver
+            }),
+            signatures,
+            nonce
+        );
+
+        assertEq(token1.balanceOf(receiver), 50e18);
+        (, , bool executed, , , , , ) = vault.withdrawals(withdrawalId);
+        assertTrue(executed);
+    }
+
+    function test_RequestWithdraw_ValidatorRequiredPowerEnforcedExactly() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        ValidatorInfo[] memory roundingValidators = new ValidatorInfo[](3);
+        roundingValidators[0] = ValidatorInfo({signer: validator1, power: 1});
+        roundingValidators[1] = ValidatorInfo({signer: validator2, power: 2});
+        roundingValidators[2] = ValidatorInfo({signer: validator3, power: 2});
+
+        vm.prank(admin);
+        vault.addValidators(roundingValidators, 4);
+
+        address receiver = address(0x160);
+        uint256 lowPowerWithdrawalId = 16;
+        uint256 lowPowerNonce = 1600;
+        bytes32 lowPowerDigest = _createRequestWithdrawDigest(
+            lowPowerWithdrawalId,
+            address(token1),
+            50e18,
+            0,
+            receiver,
+            false,
+            lowPowerNonce
+        );
+
+        bytes[] memory lowPowerSignatures = new bytes[](2);
+        lowPowerSignatures[0] = _signDigest(lowPowerDigest, validator1Key);
+        lowPowerSignatures[1] = _signDigest(lowPowerDigest, validator2Key);
+
+        vm.expectRevert(AssetVault.NotEnoughValidatorPower.selector);
+        vm.prank(operator);
+        vault.requestWithdraw(
+            lowPowerWithdrawalId,
+            false,
+            roundingValidators,
+            WithdrawAction({
+                token: address(token1),
+                amount: 50e18,
+                fee: 0,
+                receiver: receiver
+            }),
+            lowPowerSignatures,
+            lowPowerNonce
+        );
+
+        uint256 sufficientWithdrawalId = 17;
+        uint256 sufficientNonce = 1700;
+        bytes32 sufficientDigest = _createRequestWithdrawDigest(
+            sufficientWithdrawalId,
+            address(token1),
+            50e18,
+            0,
+            receiver,
+            false,
+            sufficientNonce
+        );
+
+        bytes[] memory sufficientSignatures = new bytes[](2);
+        sufficientSignatures[0] = _signDigest(sufficientDigest, validator2Key);
+        sufficientSignatures[1] = _signDigest(sufficientDigest, validator3Key);
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            sufficientWithdrawalId,
+            false,
+            roundingValidators,
+            WithdrawAction({
+                token: address(token1),
+                amount: 50e18,
+                fee: 0,
+                receiver: receiver
+            }),
+            sufficientSignatures,
+            sufficientNonce
+        );
+
+        assertEq(token1.balanceOf(receiver), 50e18);
+        (, , bool executed, , , , , ) = vault.withdrawals(sufficientWithdrawalId);
+        assertTrue(executed);
     }
 
     function test_RequestWithdraw_FeeMustBeLessThanAmount() public {
