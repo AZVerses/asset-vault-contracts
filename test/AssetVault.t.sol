@@ -553,6 +553,64 @@ contract AssetVaultTest is Test {
         assertEq(address(receiver).balance, amount);
     }
 
+    function test_EmergencyWithdraw_OnlyAdmin() public {
+        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
+        rescueToken.mint(address(vault), 100e18);
+
+        vm.expectRevert();
+        vm.prank(user);
+        vault.emergencyWithdraw(address(rescueToken), 50e18, address(0x170));
+    }
+
+    function test_EmergencyWithdraw_UnsupportedToken_Success() public {
+        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
+        address receiver = address(0x171);
+        uint256 amount = 75e18;
+        rescueToken.mint(address(vault), amount);
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.EmergencyWithdrawExecuted(receiver, address(rescueToken), amount);
+
+        vm.prank(admin);
+        vault.emergencyWithdraw(address(rescueToken), amount, receiver);
+
+        assertEq(rescueToken.balanceOf(receiver), amount);
+        assertEq(rescueToken.balanceOf(address(vault)), 0);
+    }
+
+    function test_EmergencyWithdraw_Eth_Success() public {
+        address receiver = address(0x172);
+        uint256 amount = 3e18;
+        vm.deal(address(vault), amount);
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.EmergencyWithdrawExecuted(receiver, address(0), amount);
+
+        vm.prank(admin);
+        vault.emergencyWithdraw(address(0), amount, receiver);
+
+        assertEq(receiver.balance, amount);
+        assertEq(address(vault).balance, 0);
+    }
+
+    function test_EmergencyWithdraw_InsufficientBalance_Reverts() public {
+        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
+        rescueToken.mint(address(vault), 10e18);
+
+        vm.expectRevert();
+        vm.prank(admin);
+        vault.emergencyWithdraw(address(rescueToken), 11e18, address(0x174));
+    }
+
+    function test_EmergencyWithdraw_ZeroReceiver_Reverts() public {
+        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
+        rescueToken.mint(address(vault), 10e18);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.emergencyWithdraw(address(rescueToken), 10e18, address(0));
+    }
+
     function test_PendingWithdraw_Triggered() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));

@@ -141,6 +141,11 @@ contract AssetVault is
         bool isForcePending,
         uint256 nonce
     );
+    event EmergencyWithdrawExecuted(
+        address to,
+        address token,
+        uint256 amount
+    );
 
     event WithdrawExecuted(
         uint256 withdrawalId,
@@ -397,6 +402,18 @@ contract AssetVault is
         if (!vars.isPending) {
             _executeWithdrawal(withdrawalId, false, false, false, nonce);
         }
+    }
+
+    function emergencyWithdraw(
+        address token,
+        uint256 amount,
+        address receiver
+    ) external whenNotPaused onlyRole(ADMIN_ROLE) nonReentrant {
+        if (receiver == address(0)) {
+            revert InvalidParameters();
+        }
+        _transfer(payable(receiver), token, amount, 0);
+        emit EmergencyWithdrawExecuted(receiver, token, amount);
     }
 
     function batchTogglePendingWithdrawal(
