@@ -89,6 +89,7 @@ contract AssetVault is
     error InsufficientVaultBalance();
 
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
@@ -220,7 +221,7 @@ contract AssetVault is
     function addValidators(
         ValidatorInfo[] calldata validators,
         uint256 requiredPower
-    ) external onlyRole(ADMIN_ROLE) {
+    ) external onlyRole(VALIDATOR_ROLE) {
         bytes32 validatorHash = keccak256(abi.encode(validators));
         if (availableValidators[validatorHash] != 0) {
             revert ValidatorsAlreadySet();
@@ -251,7 +252,7 @@ contract AssetVault is
     function updateValidatorRequiredPower(
         ValidatorInfo[] calldata validators,
         uint256 newRequiredPower
-    ) external onlyRole(ADMIN_ROLE) {
+    ) external onlyRole(VALIDATOR_ROLE) {
         bytes32 validatorHash = keccak256(abi.encode(validators));
         uint256 totalPower = availableValidators[validatorHash];
         if (totalPower == 0) {
@@ -269,7 +270,7 @@ contract AssetVault is
 
     function removeValidators(
         ValidatorInfo[] calldata validators
-    ) external onlyRole(ADMIN_ROLE) {
+    ) external onlyRole(VALIDATOR_ROLE) {
         bytes32 validatorHash = keccak256(abi.encode(validators));
         if (availableValidators[validatorHash] == 0) {
             revert ValidatorsNotSet();

@@ -38,6 +38,7 @@ contract AssetVaultTest is Test {
     address public tokenRole = address(0x3);
     address public pauseRole = address(0x4);
     address public user = address(0x5);
+    address public validatorRole = address(0x6);
     address public upgradeRole = address(0x7);
 
     // 0x103530DbAE2A5c82a9bCE16f568A972F1C3AA54f
@@ -53,6 +54,7 @@ contract AssetVaultTest is Test {
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
     bytes32 public constant UPGRADE_ROLE = keccak256("UPGRADE_ROLE");
@@ -75,6 +77,7 @@ contract AssetVaultTest is Test {
         vm.startPrank(address(this));
         vault.grantRole(ADMIN_ROLE, admin);
         vault.grantRole(OPERATOR_ROLE, operator);
+        vault.grantRole(VALIDATOR_ROLE, validatorRole);
         vault.grantRole(TOKEN_ROLE, tokenRole);
         vault.grantRole(PAUSE_ROLE, pauseRole);
         vault.grantRole(UPGRADE_ROLE, upgradeRole);
@@ -95,7 +98,7 @@ contract AssetVaultTest is Test {
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
 
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(validators, 40);
 
         token1.mint(user, 10000e18);
@@ -105,6 +108,7 @@ contract AssetVaultTest is Test {
     function test_Setup() public {
         assertTrue(vault.hasRole(ADMIN_ROLE, admin));
         assertTrue(vault.hasRole(OPERATOR_ROLE, operator));
+        assertTrue(vault.hasRole(VALIDATOR_ROLE, validatorRole));
         assertTrue(vault.hasRole(TOKEN_ROLE, tokenRole));
         assertTrue(vault.hasRole(PAUSE_ROLE, pauseRole));
         assertTrue(vault.hasRole(UPGRADE_ROLE, upgradeRole));
@@ -227,7 +231,7 @@ contract AssetVaultTest is Test {
     }
 
 
-    function test_AddValidators_OnlyAdmin() public {
+    function test_AddValidators_OnlyValidatorRole() public {
         ValidatorInfo[] memory newValidators = new ValidatorInfo[](2);
         newValidators[0] = ValidatorInfo({signer: address(0x20), power: 5});
         newValidators[1] = ValidatorInfo({signer: address(0x21), power: 15});
@@ -236,7 +240,7 @@ contract AssetVaultTest is Test {
         vm.prank(user);
         vault.addValidators(newValidators, 14);
 
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(newValidators, 14);
     }
 
@@ -246,7 +250,7 @@ contract AssetVaultTest is Test {
         invalidValidators[1] = ValidatorInfo({signer: address(0x20), power: 5});
 
         vm.expectRevert(AssetVault.ValidatorsNotOrdered.selector);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(invalidValidators, 14);
     }
 
@@ -257,7 +261,7 @@ contract AssetVaultTest is Test {
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
 
         vm.expectRevert(AssetVault.ValidatorsAlreadySet.selector);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(validators, 40);
     }
 
@@ -267,15 +271,15 @@ contract AssetVaultTest is Test {
         validators[1] = ValidatorInfo({signer: address(0x21), power: 15});
 
         vm.expectRevert(AssetVault.InvalidParameters.selector);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(validators, 0);
 
         vm.expectRevert(AssetVault.InvalidParameters.selector);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(validators, 21);
     }
 
-    function test_RemoveValidators_OnlyAdmin() public {
+    function test_RemoveValidators_OnlyValidatorRole() public {
         ValidatorInfo[] memory validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -288,7 +292,7 @@ contract AssetVaultTest is Test {
 
         vm.expectEmit(true, false, false, true);
         emit AssetVault.ValidatorsRemoved(validatorHash, 3);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.removeValidators(validators);
     }
 
@@ -304,7 +308,7 @@ contract AssetVaultTest is Test {
         assertEq(vault.pendingWithdrawChallengePeriod(), 2 days);
     }
 
-    function test_UpdateValidatorRequiredPower_OnlyAdmin() public {
+    function test_UpdateValidatorRequiredPower_OnlyValidatorRole() public {
         ValidatorInfo[] memory validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -317,7 +321,7 @@ contract AssetVaultTest is Test {
 
         vm.expectEmit(false, false, false, true);
         emit AssetVault.ValidatorRequiredPowerUpdated(validatorHash, 40, 45);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.updateValidatorRequiredPower(validators, 45);
         assertEq(vault.validatorRequiredPowers(validatorHash), 45);
     }
@@ -329,15 +333,15 @@ contract AssetVaultTest is Test {
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
 
         vm.expectRevert(AssetVault.ValidatorsNotSet.selector);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.updateValidatorRequiredPower(new ValidatorInfo[](0), 1);
 
         vm.expectRevert(AssetVault.InvalidParameters.selector);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.updateValidatorRequiredPower(validators, 0);
 
         vm.expectRevert(AssetVault.InvalidParameters.selector);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.updateValidatorRequiredPower(validators, 61);
     }
 
@@ -1045,7 +1049,7 @@ contract AssetVaultTest is Test {
         strictValidators[0] = ValidatorInfo({signer: validator1, power: 4});
         strictValidators[1] = ValidatorInfo({signer: validator2, power: 6});
 
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(strictValidators, 7);
 
         uint256 withdrawalId = 11;
@@ -1089,10 +1093,10 @@ contract AssetVaultTest is Test {
         strictValidators[0] = ValidatorInfo({signer: validator1, power: 4});
         strictValidators[1] = ValidatorInfo({signer: validator2, power: 6});
 
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(strictValidators, 7);
 
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.updateValidatorRequiredPower(strictValidators, 6);
 
         uint256 withdrawalId = 15;
@@ -1141,7 +1145,7 @@ contract AssetVaultTest is Test {
         roundingValidators[1] = ValidatorInfo({signer: validator2, power: 2});
         roundingValidators[2] = ValidatorInfo({signer: validator3, power: 2});
 
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.addValidators(roundingValidators, 4);
 
         address receiver = address(0x160);
