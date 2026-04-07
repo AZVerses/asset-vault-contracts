@@ -35,8 +35,6 @@ struct TokenInfo {
     uint256 lastRefillTimestamp;
     // Every time user withdraw in fast mode, this amount will be deducted
     uint256 usedWithdrawHotAmount;
-    // When token is paused, no new withdrawal can be added
-    bool paused;
 }
 
 struct ValidatorInfo {
@@ -78,7 +76,6 @@ contract AssetVault is
     error ChallengePeriodNotExpired();
     error ChallengePeriodExpired();
     error WithdrawAlreadyInDesiredState();
-    error TokenAlreadyInDesiredState();
     error WithdrawalPaused();
     error WithdrawalMustBePending();
     error EmptyTokens();
@@ -92,6 +89,7 @@ contract AssetVault is
     error InsufficientVaultBalance();
 
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
@@ -104,6 +102,7 @@ contract AssetVault is
     uint256 public pendingWithdrawChallengePeriod;
 
     mapping(bytes32 => uint256) public availableValidators;
+    mapping(bytes32 => uint256) public validatorRequiredPowers;
 
     mapping(address => uint256) public fees;
 
@@ -116,7 +115,6 @@ contract AssetVault is
         uint256 hardCapRatioBps,
         uint256 refillRateMps
     );
-    event TokenToggled(address token, bool paused);
     event TokenUpdated(
         address token,
         uint256 hardCapRatioBps,
@@ -144,6 +142,11 @@ contract AssetVault is
         bool isForcePending,
         uint256 nonce
     );
+    event EmergencyWithdrawExecuted(
+        address to,
+        address token,
+        uint256 amount
+    );
 
     event WithdrawExecuted(
         uint256 withdrawalId,
@@ -165,8 +168,18 @@ contract AssetVault is
         uint256 nonce
     );
 
-    event ValidatorsAdded(bytes32 hash, uint256 count, uint256 totalPower);
+    event ValidatorsAdded(
+        bytes32 hash,
+        uint256 count,
+        uint256 totalPower,
+        uint256 requiredPower
+    );
     event ValidatorsRemoved(bytes32 hash, uint256 count);
+    event ValidatorRequiredPowerUpdated(
+        bytes32 hash,
+        uint256 oldRequiredPower,
+        uint256 newRequiredPower
+    );
 
     event PendingWithdrawChallengePeriodUpdated(
         uint256 oldValue,
@@ -206,8 +219,9 @@ contract AssetVault is
     }
 
     function addValidators(
-        ValidatorInfo[] calldata validators
-    ) external onlyRole(ADMIN_ROLE) {
+        ValidatorInfo[] calldata validators,
+        uint256 requiredPower
+    ) external onlyRole(VALIDATOR_ROLE) {
         bytes32 validatorHash = keccak256(abi.encode(validators));
         if (availableValidators[validatorHash] != 0) {
             revert ValidatorsAlreadySet();
@@ -224,18 +238,45 @@ contract AssetVault is
             totalPower += validators[i].power;
             lastValidator = validators[i].signer;
         }
+        _validateValidatorRequiredPower(requiredPower, totalPower);
         availableValidators[validatorHash] = totalPower;
-        emit ValidatorsAdded(validatorHash, validators.length, totalPower);
+        validatorRequiredPowers[validatorHash] = requiredPower;
+        emit ValidatorsAdded(
+            validatorHash,
+            validators.length,
+            totalPower,
+            requiredPower
+        );
+    }
+
+    function updateValidatorRequiredPower(
+        ValidatorInfo[] calldata validators,
+        uint256 newRequiredPower
+    ) external onlyRole(VALIDATOR_ROLE) {
+        bytes32 validatorHash = keccak256(abi.encode(validators));
+        uint256 totalPower = availableValidators[validatorHash];
+        if (totalPower == 0) {
+            revert ValidatorsNotSet();
+        }
+        _validateValidatorRequiredPower(newRequiredPower, totalPower);
+        uint256 oldRequiredPower = validatorRequiredPowers[validatorHash];
+        validatorRequiredPowers[validatorHash] = newRequiredPower;
+        emit ValidatorRequiredPowerUpdated(
+            validatorHash,
+            oldRequiredPower,
+            newRequiredPower
+        );
     }
 
     function removeValidators(
         ValidatorInfo[] calldata validators
-    ) external onlyRole(ADMIN_ROLE) {
+    ) external onlyRole(VALIDATOR_ROLE) {
         bytes32 validatorHash = keccak256(abi.encode(validators));
         if (availableValidators[validatorHash] == 0) {
             revert ValidatorsNotSet();
         }
         delete availableValidators[validatorHash];
+        delete validatorRequiredPowers[validatorHash];
         emit ValidatorsRemoved(validatorHash, validators.length);
     }
 
@@ -269,18 +310,6 @@ contract AssetVault is
         tokenInfo.hardCapRatioBps = hardCapRatioBps;
         tokenInfo.refillRateMps = refillRateMps;
         emit TokenAdded(token, hardCapRatioBps, refillRateMps);
-    }
-
-    function toggleToken(address token, bool pause) external onlyRole(ADMIN_ROLE) {
-        TokenInfo storage tokenInfo = supportedTokens[token];
-        if (tokenInfo.hardCapRatioBps == 0) {
-            revert TokenInvalid();
-        }
-        if (tokenInfo.paused == pause) {
-            revert TokenAlreadyInDesiredState();
-        }
-        tokenInfo.paused = pause;
-        emit TokenToggled(token, pause);
     }
 
     function updateToken(
@@ -374,6 +403,18 @@ contract AssetVault is
         if (!vars.isPending) {
             _executeWithdrawal(withdrawalId, false, false, false, nonce);
         }
+    }
+
+    function emergencyWithdraw(
+        address token,
+        uint256 amount,
+        address receiver
+    ) external whenNotPaused onlyRole(ADMIN_ROLE) nonReentrant {
+        if (receiver == address(0)) {
+            revert InvalidParameters();
+        }
+        _transfer(payable(receiver), token, amount, 0);
+        emit EmergencyWithdrawExecuted(receiver, token, amount);
     }
 
     function batchTogglePendingWithdrawal(
@@ -519,6 +560,19 @@ contract AssetVault is
         }
     }
 
+    function _validateValidatorRequiredPower(
+        uint256 requiredPower,
+        uint256 totalPower
+    ) internal pure {
+        if (
+            requiredPower == 0 ||
+            totalPower == 0 ||
+            requiredPower > totalPower
+        ) {
+            revert InvalidParameters();
+        }
+    }
+
     // validators must be sorted by address
     function _verifyValidatorSignature(
         ValidatorInfo[] calldata validators,
@@ -530,6 +584,7 @@ contract AssetVault is
         if (totalPower == 0) {
             revert InvalidValidators();
         }
+        uint256 requiredPower = validatorRequiredPowers[validatorHash];
         uint256 power = 0;
         uint256 validatorIndex = 0;
         bytes32 validatorDigest = MessageHashUtils.toEthSignedMessageHash(
@@ -557,16 +612,13 @@ contract AssetVault is
                 }
             }
         }
-        if (power * 3 < totalPower * 2) {
+        if (power < requiredPower) {
             revert NotEnoughValidatorPower();
         }
     }
 
     function _refillWithdrawHotAmount(address token) internal {
         TokenInfo storage tokenInfo = supportedTokens[token];
-        if (tokenInfo.paused) {
-            return;
-        }
         uint256 refillPeriod = block.timestamp - tokenInfo.lastRefillTimestamp;
         if (refillPeriod == 0) {
             return;
@@ -639,8 +691,7 @@ contract AssetVault is
 
     function _ensureTokenValid(address token) internal view {
         TokenInfo storage tokenInfo = supportedTokens[token];
-        // not added or paused
-        if (tokenInfo.hardCapRatioBps == 0 || tokenInfo.paused) {
+        if (tokenInfo.hardCapRatioBps == 0) {
             revert TokenInvalid();
         }
     }

@@ -3,7 +3,7 @@ pragma solidity ^0.8.25;
 
 import {Test, console} from "forge-std/Test.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {AssetVault, ValidatorInfo, WithdrawAction, TokenInfo} from "../src/AssetVault.sol";
+import {AssetVault, ValidatorInfo, WithdrawAction} from "../src/AssetVault.sol";
 import {AssetVaultV2} from "./mock/AssetVaultV2.sol";
 import {MockERC20} from "./mock/MockERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -38,6 +38,7 @@ contract AssetVaultTest is Test {
     address public tokenRole = address(0x3);
     address public pauseRole = address(0x4);
     address public user = address(0x5);
+    address public validatorRole = address(0x6);
     address public upgradeRole = address(0x7);
 
     // 0x103530DbAE2A5c82a9bCE16f568A972F1C3AA54f
@@ -53,6 +54,7 @@ contract AssetVaultTest is Test {
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
+    bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
     bytes32 public constant UPGRADE_ROLE = keccak256("UPGRADE_ROLE");
@@ -75,6 +77,7 @@ contract AssetVaultTest is Test {
         vm.startPrank(address(this));
         vault.grantRole(ADMIN_ROLE, admin);
         vault.grantRole(OPERATOR_ROLE, operator);
+        vault.grantRole(VALIDATOR_ROLE, validatorRole);
         vault.grantRole(TOKEN_ROLE, tokenRole);
         vault.grantRole(PAUSE_ROLE, pauseRole);
         vault.grantRole(UPGRADE_ROLE, upgradeRole);
@@ -95,8 +98,8 @@ contract AssetVaultTest is Test {
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
 
-        vm.prank(admin);
-        vault.addValidators(validators);
+        vm.prank(validatorRole);
+        vault.addValidators(validators, 40);
 
         token1.mint(user, 10000e18);
         token2.mint(user, 10000e18);
@@ -105,10 +108,19 @@ contract AssetVaultTest is Test {
     function test_Setup() public {
         assertTrue(vault.hasRole(ADMIN_ROLE, admin));
         assertTrue(vault.hasRole(OPERATOR_ROLE, operator));
+        assertTrue(vault.hasRole(VALIDATOR_ROLE, validatorRole));
         assertTrue(vault.hasRole(TOKEN_ROLE, tokenRole));
         assertTrue(vault.hasRole(PAUSE_ROLE, pauseRole));
         assertTrue(vault.hasRole(UPGRADE_ROLE, upgradeRole));
         assertEq(vault.pendingWithdrawChallengePeriod(), CHALLENGE_PERIOD);
+
+        ValidatorInfo[] memory validators = new ValidatorInfo[](3);
+        validators[0] = ValidatorInfo({signer: validator1, power: 10});
+        validators[1] = ValidatorInfo({signer: validator2, power: 20});
+        validators[2] = ValidatorInfo({signer: validator3, power: 30});
+        bytes32 validatorHash = keccak256(abi.encode(validators));
+        assertEq(vault.availableValidators(validatorHash), 60);
+        assertEq(vault.validatorRequiredPowers(validatorHash), 40);
     }
 
     function test_AddToken_OnlyTokenRole() public {
@@ -122,7 +134,7 @@ contract AssetVaultTest is Test {
         emit AssetVault.TokenAdded(address(newToken), 5000, 1000);
         vm.prank(tokenRole);
         vault.addToken(address(newToken), 5000, 1000);
-        (address tokenAddr, , , , , ) = vault.supportedTokens(address(newToken));
+        (address tokenAddr, , , , ) = vault.supportedTokens(address(newToken));
         assertTrue(tokenAddr != address(0));
     }
 
@@ -130,87 +142,6 @@ contract AssetVaultTest is Test {
         vm.expectRevert(AssetVault.TokenAlreadyExists.selector);
         vm.prank(tokenRole);
         vault.addToken(address(token1), 5000, 1000);
-    }
-
-    function test_PauseToken_OnlyAdmin() public {
-        vm.expectRevert();
-        vm.prank(user);
-        vault.toggleToken(address(token1), true);
-
-        vm.expectEmit(true, false, false, true);
-        emit AssetVault.TokenToggled(address(token1), true);
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-        (, , , , , bool paused) = vault.supportedTokens(address(token1));
-        assertTrue(paused);
-    }
-
-    function test_PauseToken_NotSupported_Reverts() public {
-        MockERC20 unsupported = new MockERC20("Unsupported", "U");
-        vm.expectRevert(AssetVault.TokenInvalid.selector);
-        vm.prank(admin);
-        vault.toggleToken(address(unsupported), true);
-    }
-
-    function test_PauseToken_AlreadyPaused_Reverts() public {
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-        
-        vm.expectRevert(AssetVault.TokenAlreadyInDesiredState.selector);
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-    }
-
-    function test_UnpauseToken_OnlyAdmin() public {
-        // First pause the token
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-        (, , , , , bool paused) = vault.supportedTokens(address(token1));
-        assertTrue(paused);
-
-        // Test that only admin can unpause
-        vm.expectRevert();
-        vm.prank(user);
-        vault.toggleToken(address(token1), false);
-
-        vm.expectEmit(true, false, false, true);
-        emit AssetVault.TokenToggled(address(token1), false);
-        vm.prank(admin);
-        vault.toggleToken(address(token1), false);
-        (, , , , , bool pausedAfter) = vault.supportedTokens(address(token1));
-        assertFalse(pausedAfter);
-    }
-
-    function test_UnpauseToken_NotSupported_Reverts() public {
-        MockERC20 unsupported = new MockERC20("Unsupported", "U");
-        vm.expectRevert(AssetVault.TokenInvalid.selector);
-        vm.prank(admin);
-        vault.toggleToken(address(unsupported), false);
-    }
-
-    function test_UnpauseToken_AlreadyUnpaused_Reverts() public {
-        // Token is already unpaused by default
-        vm.expectRevert(AssetVault.TokenAlreadyInDesiredState.selector);
-        vm.prank(admin);
-        vault.toggleToken(address(token1), false);
-    }
-
-    function test_ToggleToken_PauseAndUnpause() public {
-        // Test full cycle: unpaused -> paused -> unpaused
-        (, , , , , bool pausedBefore) = vault.supportedTokens(address(token1));
-        assertFalse(pausedBefore);
-
-        // Pause
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-        (, , , , , bool pausedAfterPause) = vault.supportedTokens(address(token1));
-        assertTrue(pausedAfterPause);
-
-        // Unpause
-        vm.prank(admin);
-        vault.toggleToken(address(token1), false);
-        (, , , , , bool pausedAfterUnpause) = vault.supportedTokens(address(token1));
-        assertFalse(pausedAfterUnpause);
     }
 
     function test_UpdateToken_OnlyAdmin() public {
@@ -222,7 +153,7 @@ contract AssetVaultTest is Test {
         emit AssetVault.TokenUpdated(address(token1), 6000, 2000);
         vm.prank(admin);
         vault.updateToken(address(token1), 6000, 2000);
-        (, uint256 hardCapRatioBps, uint256 refillRateMps, , , ) = vault.supportedTokens(address(token1));
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , ) = vault.supportedTokens(address(token1));
         assertEq(hardCapRatioBps, 6000);
         assertEq(refillRateMps, 2000);
     }
@@ -262,7 +193,7 @@ contract AssetVaultTest is Test {
             initialData.nonce
         );
 
-        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBeforeUpdate, ) =
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBeforeUpdate) =
             vault.supportedTokens(address(token1));
         assertEq(usedBeforeUpdate, initialAmount);
 
@@ -271,7 +202,7 @@ contract AssetVaultTest is Test {
         vm.prank(admin);
         vault.updateToken(address(token1), 5000, 1_000_000);
 
-        (, , , uint256 lastRefillTimestamp, uint256 usedAfterUpdate, ) = vault.supportedTokens(address(token1));
+        (, , , uint256 lastRefillTimestamp, uint256 usedAfterUpdate) = vault.supportedTokens(address(token1));
         uint256 hardCap = (token1.balanceOf(address(vault)) * hardCapRatioBps) / 10000;
         uint256 expectedRefillAmount = (hardCap * refillRateMps * 100) / 1_000_000;
 
@@ -300,17 +231,17 @@ contract AssetVaultTest is Test {
     }
 
 
-    function test_AddValidators_OnlyAdmin() public {
+    function test_AddValidators_OnlyValidatorRole() public {
         ValidatorInfo[] memory newValidators = new ValidatorInfo[](2);
         newValidators[0] = ValidatorInfo({signer: address(0x20), power: 5});
         newValidators[1] = ValidatorInfo({signer: address(0x21), power: 15});
 
         vm.expectRevert();
         vm.prank(user);
-        vault.addValidators(newValidators);
+        vault.addValidators(newValidators, 14);
 
-        vm.prank(admin);
-        vault.addValidators(newValidators);
+        vm.prank(validatorRole);
+        vault.addValidators(newValidators, 14);
     }
 
     function test_AddValidators_NotOrdered_Reverts() public {
@@ -319,8 +250,8 @@ contract AssetVaultTest is Test {
         invalidValidators[1] = ValidatorInfo({signer: address(0x20), power: 5});
 
         vm.expectRevert(AssetVault.ValidatorsNotOrdered.selector);
-        vm.prank(admin);
-        vault.addValidators(invalidValidators);
+        vm.prank(validatorRole);
+        vault.addValidators(invalidValidators, 14);
     }
 
     function test_AddValidators_AlreadySet_Reverts() public {
@@ -330,11 +261,25 @@ contract AssetVaultTest is Test {
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
 
         vm.expectRevert(AssetVault.ValidatorsAlreadySet.selector);
-        vm.prank(admin);
-        vault.addValidators(validators);
+        vm.prank(validatorRole);
+        vault.addValidators(validators, 40);
     }
 
-    function test_RemoveValidators_OnlyAdmin() public {
+    function test_AddValidators_InvalidRequiredPower_Reverts() public {
+        ValidatorInfo[] memory validators = new ValidatorInfo[](2);
+        validators[0] = ValidatorInfo({signer: address(0x20), power: 5});
+        validators[1] = ValidatorInfo({signer: address(0x21), power: 15});
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(validatorRole);
+        vault.addValidators(validators, 0);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(validatorRole);
+        vault.addValidators(validators, 21);
+    }
+
+    function test_RemoveValidators_OnlyValidatorRole() public {
         ValidatorInfo[] memory validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -347,7 +292,7 @@ contract AssetVaultTest is Test {
 
         vm.expectEmit(true, false, false, true);
         emit AssetVault.ValidatorsRemoved(validatorHash, 3);
-        vm.prank(admin);
+        vm.prank(validatorRole);
         vault.removeValidators(validators);
     }
 
@@ -361,6 +306,43 @@ contract AssetVaultTest is Test {
         vm.prank(admin);
         vault.updatePendingWithdrawChallengePeriod(2 days);
         assertEq(vault.pendingWithdrawChallengePeriod(), 2 days);
+    }
+
+    function test_UpdateValidatorRequiredPower_OnlyValidatorRole() public {
+        ValidatorInfo[] memory validators = new ValidatorInfo[](3);
+        validators[0] = ValidatorInfo({signer: validator1, power: 10});
+        validators[1] = ValidatorInfo({signer: validator2, power: 20});
+        validators[2] = ValidatorInfo({signer: validator3, power: 30});
+        bytes32 validatorHash = keccak256(abi.encode(validators));
+
+        vm.expectRevert();
+        vm.prank(user);
+        vault.updateValidatorRequiredPower(validators, 45);
+
+        vm.expectEmit(false, false, false, true);
+        emit AssetVault.ValidatorRequiredPowerUpdated(validatorHash, 40, 45);
+        vm.prank(validatorRole);
+        vault.updateValidatorRequiredPower(validators, 45);
+        assertEq(vault.validatorRequiredPowers(validatorHash), 45);
+    }
+
+    function test_UpdateValidatorRequiredPower_InvalidParameters_Reverts() public {
+        ValidatorInfo[] memory validators = new ValidatorInfo[](3);
+        validators[0] = ValidatorInfo({signer: validator1, power: 10});
+        validators[1] = ValidatorInfo({signer: validator2, power: 20});
+        validators[2] = ValidatorInfo({signer: validator3, power: 30});
+
+        vm.expectRevert(AssetVault.ValidatorsNotSet.selector);
+        vm.prank(validatorRole);
+        vault.updateValidatorRequiredPower(new ValidatorInfo[](0), 1);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(validatorRole);
+        vault.updateValidatorRequiredPower(validators, 0);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(validatorRole);
+        vault.updateValidatorRequiredPower(validators, 61);
     }
 
     function test_RefillWithdrawHotAmount() public {
@@ -391,7 +373,7 @@ contract AssetVaultTest is Test {
 
         AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
         
-        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , uint256 usedBefore) = vault.supportedTokens(address(token1));
         
         uint256 balance = token1.balanceOf(address(vault));
         uint256 hardCap = (balance * hardCapRatioBps) / 10000;
@@ -402,7 +384,7 @@ contract AssetVaultTest is Test {
         vm.warp(block.timestamp + timePassed);
         vaultV2.refillWithdrawHotAmount(address(token1));
         
-        (, , , uint256 lastRefillAfter, uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , uint256 lastRefillAfter, uint256 usedAfter) = vault.supportedTokens(address(token1));
         
         uint256 expectedUsedAfter = usedBefore >= expectedRefillAmount ? usedBefore - expectedRefillAmount : 0;
         
@@ -415,7 +397,7 @@ contract AssetVaultTest is Test {
 
         vm.warp(block.timestamp + 10000 days);
         vaultV2.refillWithdrawHotAmount(address(token1));
-        (, , , uint256 lastRefillAfter2, uint256 usedAfter2, ) = vault.supportedTokens(address(token1));
+        (, , , uint256 lastRefillAfter2, uint256 usedAfter2) = vault.supportedTokens(address(token1));
         assertEq(lastRefillAfter2, block.timestamp);
         assertEq(usedAfter2, 0);
     }
@@ -461,62 +443,9 @@ contract AssetVaultTest is Test {
         emit AssetVault.WithdrawHotAmountRefilled(address(token1), withdrawAmount, 0);
         vaultV2.refillWithdrawHotAmount(address(token1));
 
-        (, , , uint256 lastRefillAfter, uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , uint256 lastRefillAfter, uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(lastRefillAfter, block.timestamp);
         assertEq(usedAfter, 0);
-    }
-
-    function test_RefillWithdrawHotAmount_DoesNothingWhileTokenPaused() public {
-        vm.startPrank(user);
-        assertTrue(token1.transfer(address(vault), 1000e18));
-        vm.stopPrank();
-
-        uint256 id = 3;
-        uint256 withdrawAmount = 100e18;
-        address receiver = address(0x102);
-
-        WithdrawTestData memory data = _prepareRequestWithdrawData(
-            id,
-            address(token1),
-            withdrawAmount,
-            0,
-            receiver,
-            false,
-            1042
-        );
-
-        vm.prank(operator);
-        vault.requestWithdraw(
-            id,
-            false,
-            data.validators,
-            data.action,
-            data.signatures,
-            data.nonce
-        );
-
-        implementationV2 = new AssetVaultV2();
-        vm.prank(upgradeRole);
-        vault.upgradeToAndCall(address(implementationV2), "");
-
-        AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
-
-        (, uint256 hardCapRatioBps, uint256 refillRateMps, uint256 lastRefillBeforePause, uint256 usedBeforePause, ) =
-            vault.supportedTokens(address(token1));
-        assertGt(hardCapRatioBps, 0);
-        assertGt(refillRateMps, 0);
-
-        vm.prank(admin);
-        vault.toggleToken(address(token1), true);
-
-        vm.warp(block.timestamp + 100);
-        vaultV2.refillWithdrawHotAmount(address(token1));
-
-        (, , , uint256 lastRefillWhilePaused, uint256 usedWhilePaused, bool pausedWhilePaused) =
-            vault.supportedTokens(address(token1));
-        assertTrue(pausedWhilePaused);
-        assertEq(lastRefillWhilePaused, lastRefillBeforePause);
-        assertEq(usedWhilePaused, usedBeforePause);
     }
 
     function test_IncreaseUsedWithdrawHotAmount() public {
@@ -529,18 +458,18 @@ contract AssetVaultTest is Test {
         vault.upgradeToAndCall(address(implementationV2), "");
 
         AssetVaultV2 vaultV2 = AssetVaultV2(payable(address(vault)));
-        (, , , , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         uint256 hardCap = (1000e18 * 5000) / 10000;
         uint256 smallAmount = hardCap / 2;
         bool forcePending = vaultV2.mockIncreaseUsedWithdrawHotAmount(address(token1), smallAmount);
         assertFalse(forcePending);
-        (, , , , uint256 usedAfter1, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter1) = vault.supportedTokens(address(token1));
         assertEq(usedAfter1, usedBefore + smallAmount);
 
         uint256 largeAmount = hardCap + 1;
         forcePending = vaultV2.mockIncreaseUsedWithdrawHotAmount(address(token1), largeAmount);
         assertTrue(forcePending);
-        (, , , , uint256 usedAfter2, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter2) = vault.supportedTokens(address(token1));
         assertEq(usedAfter2, usedBefore + smallAmount);
     }
 
@@ -576,7 +505,7 @@ contract AssetVaultTest is Test {
             1001
         );
 
-        (, , , , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
         emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, false, false, false, data.nonce);
 
@@ -588,7 +517,7 @@ contract AssetVaultTest is Test {
         (, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
         assertTrue(executed);
         assertFalse(pending);
-        (, , , , uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore + amount);
     }
 
@@ -628,6 +557,64 @@ contract AssetVaultTest is Test {
         assertEq(address(receiver).balance, amount);
     }
 
+    function test_EmergencyWithdraw_OnlyAdmin() public {
+        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
+        rescueToken.mint(address(vault), 100e18);
+
+        vm.expectRevert();
+        vm.prank(user);
+        vault.emergencyWithdraw(address(rescueToken), 50e18, address(0x170));
+    }
+
+    function test_EmergencyWithdraw_UnsupportedToken_Success() public {
+        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
+        address receiver = address(0x171);
+        uint256 amount = 75e18;
+        rescueToken.mint(address(vault), amount);
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.EmergencyWithdrawExecuted(receiver, address(rescueToken), amount);
+
+        vm.prank(admin);
+        vault.emergencyWithdraw(address(rescueToken), amount, receiver);
+
+        assertEq(rescueToken.balanceOf(receiver), amount);
+        assertEq(rescueToken.balanceOf(address(vault)), 0);
+    }
+
+    function test_EmergencyWithdraw_Eth_Success() public {
+        address receiver = address(0x172);
+        uint256 amount = 3e18;
+        vm.deal(address(vault), amount);
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.EmergencyWithdrawExecuted(receiver, address(0), amount);
+
+        vm.prank(admin);
+        vault.emergencyWithdraw(address(0), amount, receiver);
+
+        assertEq(receiver.balance, amount);
+        assertEq(address(vault).balance, 0);
+    }
+
+    function test_EmergencyWithdraw_InsufficientBalance_Reverts() public {
+        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
+        rescueToken.mint(address(vault), 10e18);
+
+        vm.expectRevert();
+        vm.prank(admin);
+        vault.emergencyWithdraw(address(rescueToken), 11e18, address(0x174));
+    }
+
+    function test_EmergencyWithdraw_ZeroReceiver_Reverts() public {
+        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
+        rescueToken.mint(address(vault), 10e18);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.emergencyWithdraw(address(rescueToken), 10e18, address(0));
+    }
+
     function test_PendingWithdraw_Triggered() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));
@@ -647,14 +634,14 @@ contract AssetVaultTest is Test {
             false,
             1002
         );
-        (, , , , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
         emit AssetVault.WithdrawalAdded(id, address(token1), amount, 0, receiver, true, false, data.nonce);
 
         vm.prank(operator);
         vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
 
-        (, , , , uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore);
         (, bool pending, bool executed, uint256 withdrawalAmount, , , , ) = vault.withdrawals(id);
         assertTrue(pending);
@@ -685,14 +672,14 @@ contract AssetVaultTest is Test {
             1004
         );
 
-        (, , , , uint256 usedBefore, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedBefore) = vault.supportedTokens(address(token1));
         vm.expectEmit(true, true, true, true);
         emit AssetVault.WithdrawalAdded(id, address(token1), amount, 0, receiver, true, true, data.nonce);
 
         vm.prank(operator);
         vault.requestWithdraw(id, true, data.validators, data.action, data.signatures, data.nonce);
 
-        (, , , , uint256 usedAfter, ) = vault.supportedTokens(address(token1));
+        (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore);
         (, bool pending, bool executed, , , , , ) = vault.withdrawals(id);
         assertTrue(pending);
@@ -1053,7 +1040,7 @@ contract AssetVaultTest is Test {
         vault.requestWithdraw(wrongId, false, data.validators, data.action, data.signatures, data.nonce);
     }
 
-    function test_RequestWithdraw_RequiresStrictTwoThirdsValidatorPower() public {
+    function test_RequestWithdraw_RequiresValidatorRequiredPower() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
@@ -1062,8 +1049,8 @@ contract AssetVaultTest is Test {
         strictValidators[0] = ValidatorInfo({signer: validator1, power: 4});
         strictValidators[1] = ValidatorInfo({signer: validator2, power: 6});
 
-        vm.prank(admin);
-        vault.addValidators(strictValidators);
+        vm.prank(validatorRole);
+        vault.addValidators(strictValidators, 7);
 
         uint256 withdrawalId = 11;
         uint256 nonce = 1100;
@@ -1095,6 +1082,139 @@ contract AssetVaultTest is Test {
             signatures,
             nonce
         );
+    }
+
+    function test_RequestWithdraw_UsesUpdatedValidatorRequiredPower() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        ValidatorInfo[] memory strictValidators = new ValidatorInfo[](2);
+        strictValidators[0] = ValidatorInfo({signer: validator1, power: 4});
+        strictValidators[1] = ValidatorInfo({signer: validator2, power: 6});
+
+        vm.prank(validatorRole);
+        vault.addValidators(strictValidators, 7);
+
+        vm.prank(validatorRole);
+        vault.updateValidatorRequiredPower(strictValidators, 6);
+
+        uint256 withdrawalId = 15;
+        uint256 nonce = 1500;
+        address receiver = address(0x150);
+        bytes32 digest = _createRequestWithdrawDigest(
+            withdrawalId,
+            address(token1),
+            50e18,
+            0,
+            receiver,
+            false,
+            nonce
+        );
+
+        bytes[] memory signatures = new bytes[](1);
+        signatures[0] = _signDigest(digest, validator2Key);
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            withdrawalId,
+            false,
+            strictValidators,
+            WithdrawAction({
+                token: address(token1),
+                amount: 50e18,
+                fee: 0,
+                receiver: receiver
+            }),
+            signatures,
+            nonce
+        );
+
+        assertEq(token1.balanceOf(receiver), 50e18);
+        (, , bool executed, , , , , ) = vault.withdrawals(withdrawalId);
+        assertTrue(executed);
+    }
+
+    function test_RequestWithdraw_ValidatorRequiredPowerEnforcedExactly() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        ValidatorInfo[] memory roundingValidators = new ValidatorInfo[](3);
+        roundingValidators[0] = ValidatorInfo({signer: validator1, power: 1});
+        roundingValidators[1] = ValidatorInfo({signer: validator2, power: 2});
+        roundingValidators[2] = ValidatorInfo({signer: validator3, power: 2});
+
+        vm.prank(validatorRole);
+        vault.addValidators(roundingValidators, 4);
+
+        address receiver = address(0x160);
+        uint256 lowPowerWithdrawalId = 16;
+        uint256 lowPowerNonce = 1600;
+        bytes32 lowPowerDigest = _createRequestWithdrawDigest(
+            lowPowerWithdrawalId,
+            address(token1),
+            50e18,
+            0,
+            receiver,
+            false,
+            lowPowerNonce
+        );
+
+        bytes[] memory lowPowerSignatures = new bytes[](2);
+        lowPowerSignatures[0] = _signDigest(lowPowerDigest, validator1Key);
+        lowPowerSignatures[1] = _signDigest(lowPowerDigest, validator2Key);
+
+        vm.expectRevert(AssetVault.NotEnoughValidatorPower.selector);
+        vm.prank(operator);
+        vault.requestWithdraw(
+            lowPowerWithdrawalId,
+            false,
+            roundingValidators,
+            WithdrawAction({
+                token: address(token1),
+                amount: 50e18,
+                fee: 0,
+                receiver: receiver
+            }),
+            lowPowerSignatures,
+            lowPowerNonce
+        );
+
+        uint256 sufficientWithdrawalId = 17;
+        uint256 sufficientNonce = 1700;
+        bytes32 sufficientDigest = _createRequestWithdrawDigest(
+            sufficientWithdrawalId,
+            address(token1),
+            50e18,
+            0,
+            receiver,
+            false,
+            sufficientNonce
+        );
+
+        bytes[] memory sufficientSignatures = new bytes[](2);
+        sufficientSignatures[0] = _signDigest(sufficientDigest, validator2Key);
+        sufficientSignatures[1] = _signDigest(sufficientDigest, validator3Key);
+
+        vm.prank(operator);
+        vault.requestWithdraw(
+            sufficientWithdrawalId,
+            false,
+            roundingValidators,
+            WithdrawAction({
+                token: address(token1),
+                amount: 50e18,
+                fee: 0,
+                receiver: receiver
+            }),
+            sufficientSignatures,
+            sufficientNonce
+        );
+
+        assertEq(token1.balanceOf(receiver), 50e18);
+        (, , bool executed, , , , , ) = vault.withdrawals(sufficientWithdrawalId);
+        assertTrue(executed);
     }
 
     function test_RequestWithdraw_FeeMustBeLessThanAmount() public {
@@ -1509,8 +1629,8 @@ contract AssetVaultTest is Test {
         vm.prank(operator);
         vault.requestWithdraw(id2, false, data2.validators, data2.action, data2.signatures, data2.nonce);
 
-        (, , , , uint256 used1Before, ) = vault.supportedTokens(address(token1));
-        (, , , , uint256 used2Before, ) = vault.supportedTokens(address(token2));
+        (, , , , uint256 used1Before) = vault.supportedTokens(address(token1));
+        (, , , , uint256 used2Before) = vault.supportedTokens(address(token2));
         assertGt(used1Before, 0);
         assertGt(used2Before, 0);
 
@@ -1527,8 +1647,8 @@ contract AssetVaultTest is Test {
         vm.prank(operator);
         vault.batchResetWithdrawHotAmount(tokens, resetValidators, resetSignatures, 1029);
 
-        (, , , , uint256 used1After, ) = vault.supportedTokens(address(token1));
-        (, , , , uint256 used2After, ) = vault.supportedTokens(address(token2));
+        (, , , , uint256 used1After) = vault.supportedTokens(address(token1));
+        (, , , , uint256 used2After) = vault.supportedTokens(address(token2));
         assertEq(used1After, 0);
         assertEq(used2After, 0);
     }
