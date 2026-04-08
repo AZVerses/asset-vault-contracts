@@ -107,6 +107,7 @@ contract AssetVault is
     mapping(address => uint256) public fees;
 
     mapping(uint256 => bool) public nonceUsed;
+    address public rebalanceReceiver;
 
     event DepositETH(address account, uint256 amount);
 
@@ -185,6 +186,14 @@ contract AssetVault is
         uint256 oldValue,
         uint256 newValue
     );
+    event RebalanceReceiverUpdated(address oldReceiver, address newReceiver);
+    event RebalanceWithdrawExecuted(
+        address receiver,
+        address token,
+        uint256 amount,
+        uint256 fee,
+        uint256 nonce
+    );
 
     // Fee events
     event FeesWithdrawn(address to);
@@ -216,6 +225,17 @@ contract AssetVault is
         uint256 oldValue = pendingWithdrawChallengePeriod;
         pendingWithdrawChallengePeriod = newValue;
         emit PendingWithdrawChallengePeriodUpdated(oldValue, newValue);
+    }
+
+    function setRebalanceReceiver(
+        address newReceiver
+    ) external onlyRole(ADMIN_ROLE) {
+        if (newReceiver == address(0)) {
+            revert InvalidParameters();
+        }
+        address oldReceiver = rebalanceReceiver;
+        rebalanceReceiver = newReceiver;
+        emit RebalanceReceiverUpdated(oldReceiver, newReceiver);
     }
 
     function addValidators(
@@ -403,6 +423,41 @@ contract AssetVault is
         if (!vars.isPending) {
             _executeWithdrawal(withdrawalId, false, false, false, nonce);
         }
+    }
+
+    function rebalanceWithdraw(
+        address token,
+        uint256 amount,
+        uint256 fee,
+        ValidatorInfo[] calldata validators,
+        bytes[] calldata validatorSignatures,
+        uint256 nonce
+    ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
+        address receiver = rebalanceReceiver;
+        if (receiver == address(0)) {
+            revert InvalidParameters();
+        }
+
+        _nonceUsedCheckAndSet(nonce);
+        _ensureTokenValid(token);
+        _checkTokenBalance(token, amount);
+
+        bytes32 digest = keccak256(
+            abi.encode(
+                "rebalanceWithdraw",
+                block.chainid,
+                address(this),
+                token,
+                amount,
+                fee,
+                receiver,
+                nonce
+            )
+        );
+
+        _verifyValidatorSignature(validators, digest, validatorSignatures);
+        _transfer(payable(receiver), token, amount, fee);
+        emit RebalanceWithdrawExecuted(receiver, token, amount, fee, nonce);
     }
 
     function emergencyWithdraw(

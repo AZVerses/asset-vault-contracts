@@ -40,6 +40,7 @@ contract AssetVaultTest is Test {
     address public user = address(0x5);
     address public validatorRole = address(0x6);
     address public upgradeRole = address(0x7);
+    address public rebalanceReceiverAddr = address(0x8);
 
     // 0x103530DbAE2A5c82a9bCE16f568A972F1C3AA54f
     address public validator1;
@@ -308,6 +309,25 @@ contract AssetVaultTest is Test {
         assertEq(vault.pendingWithdrawChallengePeriod(), 2 days);
     }
 
+    function test_SetRebalanceReceiver_OnlyAdmin() public {
+        vm.expectRevert();
+        vm.prank(user);
+        vault.setRebalanceReceiver(rebalanceReceiverAddr);
+
+        vm.expectEmit(false, false, false, true);
+        emit AssetVault.RebalanceReceiverUpdated(address(0), rebalanceReceiverAddr);
+        vm.prank(admin);
+        vault.setRebalanceReceiver(rebalanceReceiverAddr);
+
+        assertEq(vault.rebalanceReceiver(), rebalanceReceiverAddr);
+    }
+
+    function test_SetRebalanceReceiver_ZeroAddress_Reverts() public {
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.setRebalanceReceiver(address(0));
+    }
+
     function test_UpdateValidatorRequiredPower_OnlyValidatorRole() public {
         ValidatorInfo[] memory validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
@@ -519,6 +539,117 @@ contract AssetVaultTest is Test {
         assertFalse(pending);
         (, , , , uint256 usedAfter) = vault.supportedTokens(address(token1));
         assertEq(usedAfter, usedBefore + amount);
+    }
+
+    function test_RebalanceWithdraw_OnlyOperator() public {
+        vm.prank(admin);
+        vault.setRebalanceReceiver(rebalanceReceiverAddr);
+
+        RebalanceWithdrawTestData memory data = _prepareRebalanceWithdrawData(
+            address(token1),
+            50e18,
+            0,
+            rebalanceReceiverAddr,
+            1900
+        );
+
+        vm.expectRevert();
+        vm.prank(user);
+        vault.rebalanceWithdraw(
+            address(token1),
+            50e18,
+            0,
+            data.validators,
+            data.signatures,
+            data.nonce
+        );
+    }
+
+    function test_RebalanceWithdraw_RebalanceReceiverNotSet_Reverts() public {
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(operator);
+        vault.rebalanceWithdraw(
+            address(token1),
+            50e18,
+            0,
+            new ValidatorInfo[](0),
+            new bytes[](0),
+            1901
+        );
+    }
+
+    function test_RebalanceWithdraw_Success() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        vm.prank(admin);
+        vault.setRebalanceReceiver(rebalanceReceiverAddr);
+
+        uint256 amount = 50e18;
+        uint256 fee = 1e18;
+        RebalanceWithdrawTestData memory data = _prepareRebalanceWithdrawData(
+            address(token1),
+            amount,
+            fee,
+            rebalanceReceiverAddr,
+            1902
+        );
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.RebalanceWithdrawExecuted(
+            rebalanceReceiverAddr,
+            address(token1),
+            amount,
+            fee,
+            data.nonce
+        );
+
+        vm.prank(operator);
+        vault.rebalanceWithdraw(
+            address(token1),
+            amount,
+            fee,
+            data.validators,
+            data.signatures,
+            data.nonce
+        );
+
+        assertEq(token1.balanceOf(rebalanceReceiverAddr), amount - fee);
+        assertEq(vault.fees(address(token1)), fee);
+    }
+
+    function test_RebalanceWithdraw_SignatureBindsReceiver() public {
+        address newRebalanceReceiver = address(0x9);
+
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        vm.prank(admin);
+        vault.setRebalanceReceiver(rebalanceReceiverAddr);
+
+        RebalanceWithdrawTestData memory data = _prepareRebalanceWithdrawData(
+            address(token1),
+            50e18,
+            0,
+            rebalanceReceiverAddr,
+            1903
+        );
+
+        vm.prank(admin);
+        vault.setRebalanceReceiver(newRebalanceReceiver);
+
+        vm.expectRevert(AssetVault.NotEnoughValidatorPower.selector);
+        vm.prank(operator);
+        vault.rebalanceWithdraw(
+            address(token1),
+            50e18,
+            0,
+            data.validators,
+            data.signatures,
+            data.nonce
+        );
     }
 
     function test_NormalEthWithdraw_SetsExecutedBeforeReceiverCallback() public {
@@ -1284,6 +1415,13 @@ contract AssetVaultTest is Test {
         uint256 nonce;
     }
 
+    struct RebalanceWithdrawTestData {
+        ValidatorInfo[] validators;
+        bytes[] signatures;
+        bytes32 digest;
+        uint256 nonce;
+    }
+
     struct FlushTestData {
         uint256 hardCap;
         uint256 id;
@@ -1358,6 +1496,31 @@ contract AssetVaultTest is Test {
             fee: fee,
             receiver: receiver
         });
+    }
+
+    function _prepareRebalanceWithdrawData(
+        address token,
+        uint256 amount,
+        uint256 fee,
+        address receiver,
+        uint256 nonce
+    ) internal view returns (RebalanceWithdrawTestData memory data) {
+        data.nonce = nonce;
+        data.digest = _createRebalanceWithdrawDigest(
+            token,
+            amount,
+            fee,
+            receiver,
+            nonce
+        );
+        data.validators = new ValidatorInfo[](3);
+        data.validators[0] = ValidatorInfo({signer: validator1, power: 10});
+        data.validators[1] = ValidatorInfo({signer: validator2, power: 20});
+        data.validators[2] = ValidatorInfo({signer: validator3, power: 30});
+        data.signatures = new bytes[](3);
+        data.signatures[0] = _signDigest(data.digest, validator1Key);
+        data.signatures[1] = _signDigest(data.digest, validator2Key);
+        data.signatures[2] = _signDigest(data.digest, validator3Key);
     }
 
     function _prepareExecuteWithdrawalData(
@@ -1503,7 +1666,27 @@ contract AssetVaultTest is Test {
             )
         );
     }
-    
+
+    function _createRebalanceWithdrawDigest(
+        address token,
+        uint256 amount,
+        uint256 fee,
+        address receiver,
+        uint256 nonce
+    ) internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                "rebalanceWithdraw",
+                block.chainid,
+                address(vault),
+                token,
+                amount,
+                fee,
+                receiver,
+                nonce
+            )
+        );
+    }
 
     function _signDigest(bytes32 digest, uint256 privateKey) internal pure returns (bytes memory) {
         bytes32 ethSignedMessageHash = MessageHashUtils.toEthSignedMessageHash(digest);
