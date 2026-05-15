@@ -10,7 +10,12 @@ docs/
 
 # Dotenv file
 .env
+.env.*
 
 node_modules/
 
 .vscode/
+
+# Local deployment and helper scripts
+scripts/
+deployments/

@@ -92,6 +92,7 @@ contract AssetVault is
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
     bytes32 public constant UPGRADE_ROLE = keccak256("UPGRADE_ROLE");
 
@@ -110,6 +111,12 @@ contract AssetVault is
     address public rebalanceReceiver;
 
     event DepositETH(address account, uint256 amount);
+    event DepositOnBehalf(
+        address caller,
+        address indexed forAccount,
+        address indexed token,
+        uint256 amount
+    );
 
     event TokenAdded(
         address token,
@@ -171,13 +178,19 @@ contract AssetVault is
 
     event ValidatorsAdded(
         bytes32 hash,
+        address[] validatorAddresses,
         uint256 count,
         uint256 totalPower,
         uint256 requiredPower
     );
-    event ValidatorsRemoved(bytes32 hash, uint256 count);
+    event ValidatorsRemoved(
+        bytes32 hash,
+        address[] validatorAddresses,
+        uint256 count
+    );
     event ValidatorRequiredPowerUpdated(
         bytes32 hash,
+        address[] validatorAddresses,
         uint256 oldRequiredPower,
         uint256 newRequiredPower
     );
@@ -261,8 +274,10 @@ contract AssetVault is
         _validateValidatorRequiredPower(requiredPower, totalPower);
         availableValidators[validatorHash] = totalPower;
         validatorRequiredPowers[validatorHash] = requiredPower;
+        address[] memory validatorAddresses = _validatorAddresses(validators);
         emit ValidatorsAdded(
             validatorHash,
+            validatorAddresses,
             validators.length,
             totalPower,
             requiredPower
@@ -281,8 +296,10 @@ contract AssetVault is
         _validateValidatorRequiredPower(newRequiredPower, totalPower);
         uint256 oldRequiredPower = validatorRequiredPowers[validatorHash];
         validatorRequiredPowers[validatorHash] = newRequiredPower;
+        address[] memory validatorAddresses = _validatorAddresses(validators);
         emit ValidatorRequiredPowerUpdated(
             validatorHash,
+            validatorAddresses,
             oldRequiredPower,
             newRequiredPower
         );
@@ -297,7 +314,11 @@ contract AssetVault is
         }
         delete availableValidators[validatorHash];
         delete validatorRequiredPowers[validatorHash];
-        emit ValidatorsRemoved(validatorHash, validators.length);
+        emit ValidatorsRemoved(
+            validatorHash,
+            _validatorAddresses(validators),
+            validators.length
+        );
     }
 
     function withdrawFees(
@@ -352,6 +373,39 @@ contract AssetVault is
         }
         _ensureTokenValid(address(0));
         emit DepositETH(msg.sender, msg.value);
+    }
+
+    function depositOnBehalf(
+        address token,
+        address forAccount,
+        uint256 amount
+    ) external payable whenNotPaused onlyRole(DEPOSIT_ROLE) nonReentrant {
+        if (forAccount == address(0)) {
+            revert InvalidParameters();
+        }
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
+
+        _ensureTokenValid(token);
+
+        if (token == address(0)) {
+            if (msg.value != amount) {
+                revert InvalidParameters();
+            }
+        } else {
+            if (msg.value != 0) {
+                revert InvalidParameters();
+            }
+            SafeERC20.safeTransferFrom(
+                IERC20(token),
+                msg.sender,
+                address(this),
+                amount
+            );
+        }
+
+        emit DepositOnBehalf(msg.sender, forAccount, token, amount);
     }
 
     struct RequestWithdrawLocalVars {
@@ -500,14 +554,19 @@ contract AssetVault is
             Withdrawal storage withdrawal = withdrawals[withdrawalIds[i]];
             _refillWithdrawHotAmount(withdrawal.token);
             // 1. executed withdrawal cannot be paused/unpaused
-            // 2. pending withdrawal cannot be paused/unpaused if challenge period is expired
+            // 2. only pending withdrawals can be paused/unpaused
+            // 3. after challenge period expiry, only unpause is allowed
             _checkWithdrawalNotExecuted(withdrawalIds[i]);
             _checkWithdrawalPending(withdrawalIds[i]);
-            if (block.timestamp >= withdrawal.timestamp + pendingWithdrawChallengePeriod) {
-                revert ChallengePeriodExpired();
-            }
             if (withdrawal.paused == shouldPause) {
                 revert WithdrawAlreadyInDesiredState();
+            }
+            if (
+                shouldPause &&
+                block.timestamp >=
+                withdrawal.timestamp + pendingWithdrawChallengePeriod
+            ) {
+                revert ChallengePeriodExpired();
             }
             withdrawal.paused = shouldPause;
             emit PendingWithdrawalToggled(withdrawalIds[i], shouldPause, nonce);
@@ -531,7 +590,7 @@ contract AssetVault is
         _executeWithdrawal(withdrawalId, true, false, false, 0);
     }
 
-    // No matter the withdrawal is pending or not, paused or not, it will be executed when flushing
+    // Flushing can bypass challenge-period expiry, but cannot bypass the paused flag.
     function batchFlushWithdrawals(
         uint256[] calldata withdrawalIds,
         ValidatorInfo[] calldata validators,
@@ -558,6 +617,10 @@ contract AssetVault is
             _checkWithdrawalNotExecuted(withdrawalId);
             Withdrawal storage withdrawal = withdrawals[withdrawalId];
             _refillWithdrawHotAmount(withdrawal.token);
+            _checkWithdrawalPending(withdrawalId);
+            if (withdrawal.paused) {
+                revert WithdrawalPaused();
+            }
             _executeWithdrawal(withdrawalId, withdrawal.pending, true, withdrawal.paused, nonce);
         }
     }
@@ -625,6 +688,15 @@ contract AssetVault is
             requiredPower > totalPower
         ) {
             revert InvalidParameters();
+        }
+    }
+
+    function _validatorAddresses(
+        ValidatorInfo[] calldata validators
+    ) internal pure returns (address[] memory addresses) {
+        addresses = new address[](validators.length);
+        for (uint256 i = 0; i < validators.length; i++) {
+            addresses[i] = validators[i].signer;
         }
     }
 

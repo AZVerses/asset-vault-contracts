@@ -41,6 +41,7 @@ contract AssetVaultTest is Test {
     address public validatorRole = address(0x6);
     address public upgradeRole = address(0x7);
     address public rebalanceReceiverAddr = address(0x8);
+    address public depositRole = address(0x9);
 
     // 0x103530DbAE2A5c82a9bCE16f568A972F1C3AA54f
     address public validator1;
@@ -58,6 +59,7 @@ contract AssetVaultTest is Test {
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
     bytes32 public constant PAUSE_ROLE = keccak256("PAUSE_ROLE");
+    bytes32 public constant DEPOSIT_ROLE = keccak256("DEPOSIT_ROLE");
     bytes32 public constant UPGRADE_ROLE = keccak256("UPGRADE_ROLE");
 
     uint256 public constant CHALLENGE_PERIOD = 1 days;
@@ -81,6 +83,7 @@ contract AssetVaultTest is Test {
         vault.grantRole(VALIDATOR_ROLE, validatorRole);
         vault.grantRole(TOKEN_ROLE, tokenRole);
         vault.grantRole(PAUSE_ROLE, pauseRole);
+        vault.grantRole(DEPOSIT_ROLE, depositRole);
         vault.grantRole(UPGRADE_ROLE, upgradeRole);
         vm.stopPrank();
 
@@ -112,6 +115,7 @@ contract AssetVaultTest is Test {
         assertTrue(vault.hasRole(VALIDATOR_ROLE, validatorRole));
         assertTrue(vault.hasRole(TOKEN_ROLE, tokenRole));
         assertTrue(vault.hasRole(PAUSE_ROLE, pauseRole));
+        assertTrue(vault.hasRole(DEPOSIT_ROLE, depositRole));
         assertTrue(vault.hasRole(UPGRADE_ROLE, upgradeRole));
         assertEq(vault.pendingWithdrawChallengePeriod(), CHALLENGE_PERIOD);
 
@@ -231,16 +235,90 @@ contract AssetVaultTest is Test {
         assertEq(address(vault).balance, 10e18);
     }
 
+    function test_DepositOnBehalf_ERC20_EmitsExpectedEvent() public {
+        address forAccount = address(0x90);
+        uint256 amount = 100e18;
+
+        token1.mint(depositRole, amount);
+
+        vm.startPrank(depositRole);
+        token1.approve(address(vault), amount);
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.DepositOnBehalf(
+            depositRole,
+            forAccount,
+            address(token1),
+            amount
+        );
+        vault.depositOnBehalf(address(token1), forAccount, amount);
+        vm.stopPrank();
+
+        assertEq(token1.balanceOf(address(vault)), amount);
+    }
+
+    function test_DepositOnBehalf_Native_EmitsExpectedEvent() public {
+        address forAccount = address(0x91);
+        uint256 amount = 2e18;
+
+        vm.deal(depositRole, amount);
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.DepositOnBehalf(
+            depositRole,
+            forAccount,
+            address(0),
+            amount
+        );
+
+        vm.prank(depositRole);
+        vault.depositOnBehalf{value: amount}(address(0), forAccount, amount);
+
+        assertEq(address(vault).balance, amount);
+    }
+
+    function test_DepositOnBehalf_OnlyDepositRole() public {
+        token1.mint(user, 10e18);
+
+        vm.startPrank(user);
+        token1.approve(address(vault), 10e18);
+        vm.expectRevert();
+        vault.depositOnBehalf(address(token1), address(0x92), 10e18);
+        vm.stopPrank();
+    }
+
+    function test_DepositOnBehalf_Paused_Reverts() public {
+        token1.mint(depositRole, 10e18);
+
+        vm.prank(pauseRole);
+        vault.toggle(true);
+
+        vm.startPrank(depositRole);
+        token1.approve(address(vault), 10e18);
+        vm.expectRevert();
+        vault.depositOnBehalf(address(token1), address(0x93), 10e18);
+        vm.stopPrank();
+    }
+
 
     function test_AddValidators_OnlyValidatorRole() public {
         ValidatorInfo[] memory newValidators = new ValidatorInfo[](2);
         newValidators[0] = ValidatorInfo({signer: address(0x20), power: 5});
         newValidators[1] = ValidatorInfo({signer: address(0x21), power: 15});
+        address[] memory validatorAddresses = _validatorAddresses(newValidators);
+        bytes32 validatorHash = keccak256(abi.encode(newValidators));
 
         vm.expectRevert();
         vm.prank(user);
         vault.addValidators(newValidators, 14);
 
+        vm.expectEmit(true, false, false, true);
+        emit AssetVault.ValidatorsAdded(
+            validatorHash,
+            validatorAddresses,
+            2,
+            20,
+            14
+        );
         vm.prank(validatorRole);
         vault.addValidators(newValidators, 14);
     }
@@ -285,6 +363,7 @@ contract AssetVaultTest is Test {
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
+        address[] memory validatorAddresses = _validatorAddresses(validators);
         bytes32 validatorHash = keccak256(abi.encode(validators));
 
         vm.expectRevert();
@@ -292,7 +371,7 @@ contract AssetVaultTest is Test {
         vault.removeValidators(validators);
 
         vm.expectEmit(true, false, false, true);
-        emit AssetVault.ValidatorsRemoved(validatorHash, 3);
+        emit AssetVault.ValidatorsRemoved(validatorHash, validatorAddresses, 3);
         vm.prank(validatorRole);
         vault.removeValidators(validators);
     }
@@ -333,6 +412,7 @@ contract AssetVaultTest is Test {
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
         validators[2] = ValidatorInfo({signer: validator3, power: 30});
+        address[] memory validatorAddresses = _validatorAddresses(validators);
         bytes32 validatorHash = keccak256(abi.encode(validators));
 
         vm.expectRevert();
@@ -340,7 +420,12 @@ contract AssetVaultTest is Test {
         vault.updateValidatorRequiredPower(validators, 45);
 
         vm.expectEmit(false, false, false, true);
-        emit AssetVault.ValidatorRequiredPowerUpdated(validatorHash, 40, 45);
+        emit AssetVault.ValidatorRequiredPowerUpdated(
+            validatorHash,
+            validatorAddresses,
+            40,
+            45
+        );
         vm.prank(validatorRole);
         vault.updateValidatorRequiredPower(validators, 45);
         assertEq(vault.validatorRequiredPowers(validatorHash), 45);
@@ -939,7 +1024,7 @@ contract AssetVaultTest is Test {
         assertTrue(executed);
     }
 
-    function test_PendingWithdraw_RevertExecuteBeforeChallengePeriod() public {
+    function test_PendingWithdraw_PauseAfterChallengePeriod_Reverts() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
@@ -1027,7 +1112,7 @@ contract AssetVaultTest is Test {
         assertFalse(testData.pausedAfter);
     }
 
-    function test_FlushWithdraw_Paused_Success() public {
+    function test_FlushWithdraw_Paused_Reverts() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
@@ -1060,21 +1145,79 @@ contract AssetVaultTest is Test {
         (testData.paused, testData.pending, testData.executed, , , , , ) = vault.withdrawals(testData.id);
         assertTrue(testData.pending && !testData.executed && testData.paused);
 
-        testData.balanceBefore = token1.balanceOf(testData.receiver);
-        testData.vaultBalanceBefore = token1.balanceOf(address(vault));
-
         (ValidatorInfo[] memory flushValidators, bytes[] memory flushSignatures) = _prepareBatchFlushWithdrawalsData(testData.ids, 1019);
-        vm.expectEmit(true, true, true, true);
-        emit AssetVault.WithdrawExecuted(testData.id, testData.receiver, address(token1), testData.amount, testData.fee, true, true, true, 1019);
-
+        vm.expectRevert(AssetVault.WithdrawalPaused.selector);
         vm.prank(operator);
         vault.batchFlushWithdrawals(testData.ids, flushValidators, flushSignatures, 1019);
+    }
 
-        assertEq(token1.balanceOf(testData.receiver), testData.balanceBefore + testData.amount - testData.fee);
-        assertEq(token1.balanceOf(address(vault)), testData.vaultBalanceBefore - testData.amount + testData.fee);
+    function test_PendingWithdraw_UnpauseAfterChallengePeriod_ThenExecute_Success() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        FlushTestData memory testData;
+        testData.id = 1;
+        testData.amount = (1000e18 * 5000) / 10000 + 1e18;
+        testData.fee = 1e18;
+        testData.receiver = address(0x100);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            testData.id,
+            address(token1),
+            testData.amount,
+            testData.fee,
+            testData.receiver,
+            false,
+            1019
+        );
+
+        vm.prank(operator);
+        vault.requestWithdraw(testData.id, false, data.validators, data.action, data.signatures, data.nonce);
+
+        testData.ids = new uint256[](1);
+        testData.ids[0] = testData.id;
+        (ValidatorInfo[] memory pauseValidators, bytes[] memory pauseSignatures) = _prepareBatchTogglePendingWithdrawalData(testData.ids, true, 1020);
+        vm.prank(operator);
+        vault.batchTogglePendingWithdrawal(testData.ids, true, pauseValidators, pauseSignatures, 1020);
+
+        vm.warp(block.timestamp + CHALLENGE_PERIOD + 1);
+
+        vm.expectRevert(AssetVault.WithdrawalPaused.selector);
+        vm.prank(operator);
+        vault.executePendingWithdrawal(testData.id);
+
+        (ValidatorInfo[] memory flushValidators, bytes[] memory flushSignatures) = _prepareBatchFlushWithdrawalsData(testData.ids, 1021);
+        vm.expectRevert(AssetVault.WithdrawalPaused.selector);
+        vm.prank(operator);
+        vault.batchFlushWithdrawals(testData.ids, flushValidators, flushSignatures, 1021);
+
+        (ValidatorInfo[] memory unpauseValidators, bytes[] memory unpauseSignatures) = _prepareBatchTogglePendingWithdrawalData(testData.ids, false, 1022);
+        vm.expectEmit(true, false, false, true);
+        emit AssetVault.PendingWithdrawalToggled(testData.id, false, 1022);
+        vm.prank(operator);
+        vault.batchTogglePendingWithdrawal(testData.ids, false, unpauseValidators, unpauseSignatures, 1022);
+
+        vm.expectEmit(true, true, true, true);
+        emit AssetVault.WithdrawExecuted(
+            testData.id,
+            testData.receiver,
+            address(token1),
+            testData.amount,
+            testData.fee,
+            true,
+            false,
+            false,
+            0
+        );
+        vm.prank(operator);
+        vault.executePendingWithdrawal(testData.id);
+
+        assertEq(token1.balanceOf(testData.receiver), testData.amount - testData.fee);
         assertEq(vault.fees(address(token1)), testData.fee);
         (testData.pausedAfter, testData.pendingAfter, testData.executedAfter, , , , , ) = vault.withdrawals(testData.id);
-        assertTrue(testData.executedAfter && testData.pendingAfter && testData.pausedAfter);
+        assertFalse(testData.pausedAfter);
+        assertTrue(testData.pendingAfter && testData.executedAfter);
     }
 
     function test_Withdraw_WrongSignature_ModifiedSignature_Reverts() public {
@@ -1686,6 +1829,15 @@ contract AssetVaultTest is Test {
                 nonce
             )
         );
+    }
+
+    function _validatorAddresses(
+        ValidatorInfo[] memory validators
+    ) internal pure returns (address[] memory addresses) {
+        addresses = new address[](validators.length);
+        for (uint256 i = 0; i < validators.length; i++) {
+            addresses[i] = validators[i].signer;
+        }
     }
 
     function _signDigest(bytes32 digest, uint256 privateKey) internal pure returns (bytes memory) {
