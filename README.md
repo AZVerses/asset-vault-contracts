@@ -179,7 +179,7 @@ In short:
 - `pending + not paused + expired` -> can flush
 - `pending + paused` -> cannot flush
 
-### `executePendingWithdrawal`
+### `executeExpiredPendingWithdrawal`
 
 Conditions:
 

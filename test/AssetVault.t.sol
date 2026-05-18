@@ -866,7 +866,7 @@ contract AssetVaultTest is Test {
 
         vm.expectRevert(AssetVault.ChallengePeriodNotExpired.selector);
         vm.prank(operator);
-        vault.executePendingWithdrawal(id);
+        vault.executeExpiredPendingWithdrawal(id);
     }
 
     function test_ForcePendingWithdraw() public {
@@ -903,7 +903,7 @@ contract AssetVaultTest is Test {
 
         vm.expectRevert(AssetVault.ChallengePeriodNotExpired.selector);
         vm.prank(operator);
-        vault.executePendingWithdrawal(id);
+        vault.executeExpiredPendingWithdrawal(id);
     }
 
     function test_PauseWithdraw_OnlyPendingNotExpired() public {
@@ -1016,7 +1016,7 @@ contract AssetVaultTest is Test {
         emit AssetVault.WithdrawExecuted(id, receiver, address(token1), amount, fee, true, false, false, 0);
 
         vm.prank(operator);
-        vault.executePendingWithdrawal(id);
+        vault.executeExpiredPendingWithdrawal(id);
 
         assertEq(token1.balanceOf(receiver), amount - fee);
         assertEq(vault.fees(address(token1)), fee);
@@ -1185,7 +1185,7 @@ contract AssetVaultTest is Test {
 
         vm.expectRevert(AssetVault.WithdrawalPaused.selector);
         vm.prank(operator);
-        vault.executePendingWithdrawal(testData.id);
+        vault.executeExpiredPendingWithdrawal(testData.id);
 
         (ValidatorInfo[] memory flushValidators, bytes[] memory flushSignatures) = _prepareBatchFlushWithdrawalsData(testData.ids, 1021);
         vm.expectRevert(AssetVault.WithdrawalPaused.selector);
@@ -1211,7 +1211,7 @@ contract AssetVaultTest is Test {
             0
         );
         vm.prank(operator);
-        vault.executePendingWithdrawal(testData.id);
+        vault.executeExpiredPendingWithdrawal(testData.id);
 
         assertEq(token1.balanceOf(testData.receiver), testData.amount - testData.fee);
         assertEq(vault.fees(address(token1)), testData.fee);
@@ -1666,11 +1666,11 @@ contract AssetVaultTest is Test {
         data.signatures[2] = _signDigest(data.digest, validator3Key);
     }
 
-    function _prepareExecuteWithdrawalData(
+    function _prepareExecuteExpiredPendingWithdrawalData(
         uint256 id,
         uint256 nonce
     ) internal view returns (ValidatorInfo[] memory validators, bytes[] memory signatures) {
-        bytes32 digest = _createExecuteWithdrawalDigest(id, nonce);
+        bytes32 digest = _createExecuteExpiredPendingWithdrawalDigest(id, nonce);
         validators = new ValidatorInfo[](3);
         validators[0] = ValidatorInfo({signer: validator1, power: 10});
         validators[1] = ValidatorInfo({signer: validator2, power: 20});
@@ -1748,13 +1748,13 @@ contract AssetVaultTest is Test {
         );
     }
 
-    function _createExecuteWithdrawalDigest(
+    function _createExecuteExpiredPendingWithdrawalDigest(
         uint256 id,
         uint256 nonce
     ) internal view returns (bytes32) {
         return keccak256(
             abi.encode(
-                "executePendingWithdrawal",
+                "executeExpiredPendingWithdrawal",
                 id,
                 block.chainid,
                 address(vault),

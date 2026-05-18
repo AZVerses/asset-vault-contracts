@@ -573,7 +573,7 @@ contract AssetVault is
         }
     }
 
-    function executePendingWithdrawal(
+    function executeExpiredPendingWithdrawal(
         uint256 withdrawalId
     ) external whenNotPaused nonReentrant {
         _checkWithdrawalExists(withdrawalId, true);
