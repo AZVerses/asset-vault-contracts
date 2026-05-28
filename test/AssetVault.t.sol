@@ -149,14 +149,14 @@ contract AssetVaultTest is Test {
         vault.addToken(address(token1), 5000, 1000);
     }
 
-    function test_UpdateToken_OnlyAdmin() public {
+    function test_UpdateToken_OnlyTokenRole() public {
         vm.expectRevert();
         vm.prank(user);
         vault.updateToken(address(token1), 6000, 2000);
 
         vm.expectEmit(true, false, false, true);
         emit AssetVault.TokenUpdated(address(token1), 6000, 2000);
-        vm.prank(admin);
+        vm.prank(tokenRole);
         vault.updateToken(address(token1), 6000, 2000);
         (, uint256 hardCapRatioBps, uint256 refillRateMps, , ) = vault.supportedTokens(address(token1));
         assertEq(hardCapRatioBps, 6000);
@@ -166,7 +166,7 @@ contract AssetVaultTest is Test {
     function test_UpdateToken_NotSupported_Reverts() public {
         MockERC20 unsupported = new MockERC20("Unsupported", "U");
         vm.expectRevert(AssetVault.TokenInvalid.selector);
-        vm.prank(admin);
+        vm.prank(tokenRole);
         vault.updateToken(address(unsupported), 6000, 2000);
     }
 
@@ -204,7 +204,7 @@ contract AssetVaultTest is Test {
 
         vm.warp(block.timestamp + 100);
 
-        vm.prank(admin);
+        vm.prank(tokenRole);
         vault.updateToken(address(token1), 5000, 1_000_000);
 
         (, , , uint256 lastRefillTimestamp, uint256 usedAfterUpdate) = vault.supportedTokens(address(token1));

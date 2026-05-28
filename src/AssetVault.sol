@@ -357,7 +357,7 @@ contract AssetVault is
         address token,
         uint256 hardCapRatioBps,
         uint256 refillRateMps
-    ) external onlyRole(ADMIN_ROLE) {
+    ) external onlyRole(TOKEN_ROLE) {
         _ensureTokenValid(token);
         _validateTokenConfig(hardCapRatioBps, refillRateMps);
         _refillWithdrawHotAmount(token);
