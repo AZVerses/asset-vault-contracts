@@ -9,7 +9,7 @@ It serves four purposes:
 - hold supported assets, including ERC-20 and native token
 - settle normal withdrawals through a validator-authorized flow
 - split withdrawals into a fast path and a slow path
-- provide explicit operational controls for pausing, flushing, emergency withdrawal, and upgrade
+- provide explicit operational controls for pausing, flushing, rebalance payout control, and upgrade
 
 The contract is UUPS-upgradeable and built around role-based access control plus validator quorum verification.
 
@@ -23,10 +23,9 @@ The contract is UUPS-upgradeable and built around role-based access control plus
 ### `ADMIN_ROLE`
 
 - updates `pendingWithdrawChallengePeriod`
-- updates supported token risk parameters
-- sets `rebalanceReceiver`
+- manages the rebalance receiver allowlist
+- sets the active `rebalanceReceiver`
 - withdraws accumulated fees
-- performs `emergencyWithdraw`
 
 ### `VALIDATOR_ROLE`
 
@@ -233,7 +232,7 @@ Conditions:
 - vault must not be globally paused
 - token must be supported
 - vault must have enough balance
-- `rebalanceReceiver` must be set
+- `rebalanceReceiver` must be set and allowlisted
 - validator signatures must satisfy the configured validator set and required power
 
 Behavior:
@@ -265,20 +264,6 @@ Conditions:
 Behavior:
 
 - transfers accumulated fees out of the vault
-
-### `emergencyWithdraw`
-
-Conditions:
-
-- caller must have `ADMIN_ROLE`
-- vault must not be globally paused
-- receiver must not be zero address
-
-Behavior:
-
-- transfers vault assets directly to the given receiver
-
-This is not a lightweight admin action. It is direct asset movement authority.
 
 ### `toggle`
 

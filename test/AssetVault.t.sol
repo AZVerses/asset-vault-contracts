@@ -388,7 +388,58 @@ contract AssetVaultTest is Test {
         assertEq(vault.pendingWithdrawChallengePeriod(), 2 days);
     }
 
+    function test_AddRebalanceReceiver_OnlyAdmin() public {
+        vm.expectRevert();
+        vm.prank(user);
+        vault.addRebalanceReceiver(rebalanceReceiverAddr);
+
+        vm.expectEmit(false, false, false, true);
+        emit AssetVault.RebalanceReceiverAllowlistUpdated(rebalanceReceiverAddr, true);
+        vm.prank(admin);
+        vault.addRebalanceReceiver(rebalanceReceiverAddr);
+
+        assertTrue(vault.allowedRebalanceReceivers(rebalanceReceiverAddr));
+    }
+
+    function test_AddRebalanceReceiver_InvalidParameters_Reverts() public {
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.addRebalanceReceiver(address(0));
+
+        vm.prank(admin);
+        vault.addRebalanceReceiver(rebalanceReceiverAddr);
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.addRebalanceReceiver(rebalanceReceiverAddr);
+    }
+
+    function test_RemoveRebalanceReceiver_OnlyAdmin() public {
+        _allowRebalanceReceiver(rebalanceReceiverAddr);
+
+        vm.expectRevert();
+        vm.prank(user);
+        vault.removeRebalanceReceiver(rebalanceReceiverAddr);
+
+        vm.expectEmit(false, false, false, true);
+        emit AssetVault.RebalanceReceiverAllowlistUpdated(rebalanceReceiverAddr, false);
+        vm.prank(admin);
+        vault.removeRebalanceReceiver(rebalanceReceiverAddr);
+
+        assertFalse(vault.allowedRebalanceReceivers(rebalanceReceiverAddr));
+    }
+
+    function test_RemoveRebalanceReceiver_ActiveReceiver_Reverts() public {
+        _allowAndSetRebalanceReceiver(rebalanceReceiverAddr);
+
+        vm.expectRevert(AssetVault.RebalanceReceiverInUse.selector);
+        vm.prank(admin);
+        vault.removeRebalanceReceiver(rebalanceReceiverAddr);
+    }
+
     function test_SetRebalanceReceiver_OnlyAdmin() public {
+        _allowRebalanceReceiver(rebalanceReceiverAddr);
+
         vm.expectRevert();
         vm.prank(user);
         vault.setRebalanceReceiver(rebalanceReceiverAddr);
@@ -401,10 +452,14 @@ contract AssetVaultTest is Test {
         assertEq(vault.rebalanceReceiver(), rebalanceReceiverAddr);
     }
 
-    function test_SetRebalanceReceiver_ZeroAddress_Reverts() public {
+    function test_SetRebalanceReceiver_InvalidParameters_Reverts() public {
         vm.expectRevert(AssetVault.InvalidParameters.selector);
         vm.prank(admin);
         vault.setRebalanceReceiver(address(0));
+
+        vm.expectRevert(AssetVault.InvalidParameters.selector);
+        vm.prank(admin);
+        vault.setRebalanceReceiver(rebalanceReceiverAddr);
     }
 
     function test_UpdateValidatorRequiredPower_OnlyValidatorRole() public {
@@ -627,8 +682,7 @@ contract AssetVaultTest is Test {
     }
 
     function test_RebalanceWithdraw_OnlyOperator() public {
-        vm.prank(admin);
-        vault.setRebalanceReceiver(rebalanceReceiverAddr);
+        _allowAndSetRebalanceReceiver(rebalanceReceiverAddr);
 
         RebalanceWithdrawTestData memory data = _prepareRebalanceWithdrawData(
             address(token1),
@@ -668,8 +722,7 @@ contract AssetVaultTest is Test {
         assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
-        vm.prank(admin);
-        vault.setRebalanceReceiver(rebalanceReceiverAddr);
+        _allowAndSetRebalanceReceiver(rebalanceReceiverAddr);
 
         uint256 amount = 50e18;
         uint256 fee = 1e18;
@@ -711,8 +764,7 @@ contract AssetVaultTest is Test {
         assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
 
-        vm.prank(admin);
-        vault.setRebalanceReceiver(rebalanceReceiverAddr);
+        _allowAndSetRebalanceReceiver(rebalanceReceiverAddr);
 
         RebalanceWithdrawTestData memory data = _prepareRebalanceWithdrawData(
             address(token1),
@@ -721,6 +773,8 @@ contract AssetVaultTest is Test {
             rebalanceReceiverAddr,
             1903
         );
+
+        _allowRebalanceReceiver(newRebalanceReceiver);
 
         vm.prank(admin);
         vault.setRebalanceReceiver(newRebalanceReceiver);
@@ -773,63 +827,6 @@ contract AssetVaultTest is Test {
         assertEq(address(receiver).balance, amount);
     }
 
-    function test_EmergencyWithdraw_OnlyAdmin() public {
-        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
-        rescueToken.mint(address(vault), 100e18);
-
-        vm.expectRevert();
-        vm.prank(user);
-        vault.emergencyWithdraw(address(rescueToken), 50e18, address(0x170));
-    }
-
-    function test_EmergencyWithdraw_UnsupportedToken_Success() public {
-        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
-        address receiver = address(0x171);
-        uint256 amount = 75e18;
-        rescueToken.mint(address(vault), amount);
-
-        vm.expectEmit(true, true, true, true);
-        emit AssetVault.EmergencyWithdrawExecuted(receiver, address(rescueToken), amount);
-
-        vm.prank(admin);
-        vault.emergencyWithdraw(address(rescueToken), amount, receiver);
-
-        assertEq(rescueToken.balanceOf(receiver), amount);
-        assertEq(rescueToken.balanceOf(address(vault)), 0);
-    }
-
-    function test_EmergencyWithdraw_Eth_Success() public {
-        address receiver = address(0x172);
-        uint256 amount = 3e18;
-        vm.deal(address(vault), amount);
-
-        vm.expectEmit(true, true, true, true);
-        emit AssetVault.EmergencyWithdrawExecuted(receiver, address(0), amount);
-
-        vm.prank(admin);
-        vault.emergencyWithdraw(address(0), amount, receiver);
-
-        assertEq(receiver.balance, amount);
-        assertEq(address(vault).balance, 0);
-    }
-
-    function test_EmergencyWithdraw_InsufficientBalance_Reverts() public {
-        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
-        rescueToken.mint(address(vault), 10e18);
-
-        vm.expectRevert();
-        vm.prank(admin);
-        vault.emergencyWithdraw(address(rescueToken), 11e18, address(0x174));
-    }
-
-    function test_EmergencyWithdraw_ZeroReceiver_Reverts() public {
-        MockERC20 rescueToken = new MockERC20("RescueToken", "RST");
-        rescueToken.mint(address(vault), 10e18);
-
-        vm.expectRevert(AssetVault.InvalidParameters.selector);
-        vm.prank(admin);
-        vault.emergencyWithdraw(address(rescueToken), 10e18, address(0));
-    }
 
     function test_PendingWithdraw_Triggered() public {
         vm.startPrank(user);
@@ -1639,6 +1636,18 @@ contract AssetVaultTest is Test {
             fee: fee,
             receiver: receiver
         });
+    }
+
+    function _allowRebalanceReceiver(address receiver) internal {
+        vm.prank(admin);
+        vault.addRebalanceReceiver(receiver);
+    }
+
+    function _allowAndSetRebalanceReceiver(address receiver) internal {
+        vm.startPrank(admin);
+        vault.addRebalanceReceiver(receiver);
+        vault.setRebalanceReceiver(receiver);
+        vm.stopPrank();
     }
 
     function _prepareRebalanceWithdrawData(

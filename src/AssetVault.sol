@@ -87,6 +87,7 @@ contract AssetVault is
     error WithdrawalAlreadyExecuted();
     error NonceAlreadyUsed();
     error InsufficientVaultBalance();
+    error RebalanceReceiverInUse();
 
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
@@ -109,6 +110,7 @@ contract AssetVault is
 
     mapping(uint256 => bool) public nonceUsed;
     address public rebalanceReceiver;
+    mapping(address => bool) public allowedRebalanceReceivers;
 
     event DepositETH(address account, uint256 amount);
     event DepositOnBehalf(
@@ -150,12 +152,6 @@ contract AssetVault is
         bool isForcePending,
         uint256 nonce
     );
-    event EmergencyWithdrawExecuted(
-        address to,
-        address token,
-        uint256 amount
-    );
-
     event WithdrawExecuted(
         uint256 withdrawalId,
         address to,
@@ -199,6 +195,7 @@ contract AssetVault is
         uint256 oldValue,
         uint256 newValue
     );
+    event RebalanceReceiverAllowlistUpdated(address receiver, bool allowed);
     event RebalanceReceiverUpdated(address oldReceiver, address newReceiver);
     event RebalanceWithdrawExecuted(
         address receiver,
@@ -240,10 +237,40 @@ contract AssetVault is
         emit PendingWithdrawChallengePeriodUpdated(oldValue, newValue);
     }
 
+    function addRebalanceReceiver(
+        address receiver
+    ) external onlyRole(ADMIN_ROLE) {
+        if (
+            receiver == address(0) || allowedRebalanceReceivers[receiver]
+        ) {
+            revert InvalidParameters();
+        }
+        allowedRebalanceReceivers[receiver] = true;
+        emit RebalanceReceiverAllowlistUpdated(receiver, true);
+    }
+
+    function removeRebalanceReceiver(
+        address receiver
+    ) external onlyRole(ADMIN_ROLE) {
+        if (
+            receiver == address(0) || !allowedRebalanceReceivers[receiver]
+        ) {
+            revert InvalidParameters();
+        }
+        if (receiver == rebalanceReceiver) {
+            revert RebalanceReceiverInUse();
+        }
+        delete allowedRebalanceReceivers[receiver];
+        emit RebalanceReceiverAllowlistUpdated(receiver, false);
+    }
+
     function setRebalanceReceiver(
         address newReceiver
     ) external onlyRole(ADMIN_ROLE) {
-        if (newReceiver == address(0)) {
+        if (
+            newReceiver == address(0) ||
+            !allowedRebalanceReceivers[newReceiver]
+        ) {
             revert InvalidParameters();
         }
         address oldReceiver = rebalanceReceiver;
@@ -488,7 +515,9 @@ contract AssetVault is
         uint256 nonce
     ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
         address receiver = rebalanceReceiver;
-        if (receiver == address(0)) {
+        if (
+            receiver == address(0) || !allowedRebalanceReceivers[receiver]
+        ) {
             revert InvalidParameters();
         }
 
@@ -512,18 +541,6 @@ contract AssetVault is
         _verifyValidatorSignature(validators, digest, validatorSignatures);
         _transfer(payable(receiver), token, amount, fee);
         emit RebalanceWithdrawExecuted(receiver, token, amount, fee, nonce);
-    }
-
-    function emergencyWithdraw(
-        address token,
-        uint256 amount,
-        address receiver
-    ) external whenNotPaused onlyRole(ADMIN_ROLE) nonReentrant {
-        if (receiver == address(0)) {
-            revert InvalidParameters();
-        }
-        _transfer(payable(receiver), token, amount, 0);
-        emit EmergencyWithdrawExecuted(receiver, token, amount);
     }
 
     function batchTogglePendingWithdrawal(

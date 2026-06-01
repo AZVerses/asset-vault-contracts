@@ -125,9 +125,10 @@
 - Hash ID: `0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775`
 - Responsibilities:
   - `updatePendingWithdrawChallengePeriod(uint256)`: 修改 pending withdrawal 的挑战期长度。
-  - `setRebalanceReceiver(address)`: 设置 `rebalanceWithdraw` 的固定收款地址。
+  - `addRebalanceReceiver(address)`: 把地址加入 `rebalanceWithdraw` 可用的收款白名单。
+  - `removeRebalanceReceiver(address)`: 把地址从 `rebalanceWithdraw` 收款白名单中移除。
+  - `setRebalanceReceiver(address)`: 从白名单中选择当前生效的 `rebalanceWithdraw` 收款地址。
   - `withdrawFees(address[],address)`: 提走协议累计手续费。
-  - `emergencyWithdraw(address,uint256,address)`: 在紧急情况下从 Vault 直接转出指定 token 和数量到指定地址。
 
 ## TOKEN_ROLE
 
@@ -266,7 +267,28 @@
 - Parameters:
   - `newReceiver`: 新的 rebalance 收款地址
 - 复核重点：
+  - `newReceiver` 必须已经在 rebalance receiver 白名单里
   - `newReceiver` 必须来自内部地址台账
+
+### addRebalanceReceiver
+
+- Required Role: `ADMIN_ROLE`
+- Path: `Admin Safe -> Vault Proxy`
+- Parameters:
+  - `receiver`: 要加入白名单的 rebalance 收款地址
+- 复核重点：
+  - 该地址加入白名单后，未来可以被设为 active rebalance receiver
+  - 地址来源和用途必须与审批记录一致
+
+### removeRebalanceReceiver
+
+- Required Role: `ADMIN_ROLE`
+- Path: `Admin Safe -> Vault Proxy`
+- Parameters:
+  - `receiver`: 要从白名单移除的 rebalance 收款地址
+- 复核重点：
+  - 当前 active rebalance receiver 不能直接移除
+  - 若要移除旧地址，应先切换到新的 active receiver，再删除旧地址
 
 ### withdrawFees
 
@@ -277,17 +299,6 @@
   - `to`: 手续费接收地址
 - 复核重点：
   - `to` 必须是已批准的 treasury 或指定接收地址
-
-### emergencyWithdraw
-
-- Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
-- Parameters:
-  - `token`: 要转出的 token，原生币用 `address(0)`
-  - `amount`: 最小单位数量
-  - `receiver`: 收款地址
-- 高危提醒：
-  - `token / amount / receiver` 任一填错都会直接造成资产损失
 
 ### addToken
 

@@ -155,11 +155,25 @@ export const operations: OperationDef[] = [
     ],
   },
   {
+    id: "add-rebalance-receiver",
+    label: "addRebalanceReceiver",
+    role: "ADMIN_ROLE",
+    mode: "direct",
+    description: "Add an address to the rebalance receiver allowlist.",
+    functionName: "addRebalanceReceiver",
+    functionSignature: "addRebalanceReceiver(address)",
+    abiJson: abi(
+      '[{"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"addRebalanceReceiver","outputs":[],"stateMutability":"nonpayable","type":"function"}]',
+    ),
+    targetType: "vault",
+    params: [{ name: "receiver", label: "Receiver", kind: "address", placeholder: "0x..." }],
+  },
+  {
     id: "set-rebalance-receiver",
     label: "setRebalanceReceiver",
     role: "ADMIN_ROLE",
     mode: "direct",
-    description: "Set the fixed rebalance receiver.",
+    description: "Set the active rebalance receiver from the allowlist.",
     functionName: "setRebalanceReceiver",
     functionSignature: "setRebalanceReceiver(address)",
     abiJson: abi(
@@ -169,6 +183,20 @@ export const operations: OperationDef[] = [
     params: [
       { name: "newReceiver", label: "New Receiver", kind: "address", placeholder: "0x..." },
     ],
+  },
+  {
+    id: "remove-rebalance-receiver",
+    label: "removeRebalanceReceiver",
+    role: "ADMIN_ROLE",
+    mode: "direct",
+    description: "Remove an address from the rebalance receiver allowlist.",
+    functionName: "removeRebalanceReceiver",
+    functionSignature: "removeRebalanceReceiver(address)",
+    abiJson: abi(
+      '[{"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"removeRebalanceReceiver","outputs":[],"stateMutability":"nonpayable","type":"function"}]',
+    ),
+    targetType: "vault",
+    params: [{ name: "receiver", label: "Receiver", kind: "address", placeholder: "0x..." }],
   },
   {
     id: "withdraw-fees",
@@ -191,24 +219,6 @@ export const operations: OperationDef[] = [
         help: "Use address(0) for native token.",
       },
       { name: "to", label: "Receiver", kind: "address", placeholder: "0x..." },
-    ],
-  },
-  {
-    id: "emergency-withdraw",
-    label: "emergencyWithdraw",
-    role: "ADMIN_ROLE",
-    mode: "direct",
-    description: "Emergency asset transfer out of the vault.",
-    functionName: "emergencyWithdraw",
-    functionSignature: "emergencyWithdraw(address,uint256,address)",
-    abiJson: abi(
-      '[{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"address","name":"receiver","type":"address"}],"name":"emergencyWithdraw","outputs":[],"stateMutability":"nonpayable","type":"function"}]',
-    ),
-    targetType: "vault",
-    params: [
-      { name: "token", label: "Token", kind: "address", placeholder: "0x..." },
-      { name: "amount", label: "Amount (base units)", kind: "uint256", placeholder: "100000000" },
-      { name: "receiver", label: "Receiver", kind: "address", placeholder: "0x..." },
     ],
   },
   {
