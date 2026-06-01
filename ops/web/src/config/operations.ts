@@ -155,25 +155,11 @@ export const operations: OperationDef[] = [
     ],
   },
   {
-    id: "add-rebalance-receiver",
-    label: "addRebalanceReceiver",
-    role: "ADMIN_ROLE",
-    mode: "direct",
-    description: "Add an address to the rebalance receiver allowlist.",
-    functionName: "addRebalanceReceiver",
-    functionSignature: "addRebalanceReceiver(address)",
-    abiJson: abi(
-      '[{"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"addRebalanceReceiver","outputs":[],"stateMutability":"nonpayable","type":"function"}]',
-    ),
-    targetType: "vault",
-    params: [{ name: "receiver", label: "Receiver", kind: "address", placeholder: "0x..." }],
-  },
-  {
     id: "set-rebalance-receiver",
     label: "setRebalanceReceiver",
     role: "ADMIN_ROLE",
     mode: "direct",
-    description: "Set the active rebalance receiver from the allowlist.",
+    description: "Set the fixed rebalance receiver.",
     functionName: "setRebalanceReceiver",
     functionSignature: "setRebalanceReceiver(address)",
     abiJson: abi(
@@ -183,20 +169,6 @@ export const operations: OperationDef[] = [
     params: [
       { name: "newReceiver", label: "New Receiver", kind: "address", placeholder: "0x..." },
     ],
-  },
-  {
-    id: "remove-rebalance-receiver",
-    label: "removeRebalanceReceiver",
-    role: "ADMIN_ROLE",
-    mode: "direct",
-    description: "Remove an address from the rebalance receiver allowlist.",
-    functionName: "removeRebalanceReceiver",
-    functionSignature: "removeRebalanceReceiver(address)",
-    abiJson: abi(
-      '[{"inputs":[{"internalType":"address","name":"receiver","type":"address"}],"name":"removeRebalanceReceiver","outputs":[],"stateMutability":"nonpayable","type":"function"}]',
-    ),
-    targetType: "vault",
-    params: [{ name: "receiver", label: "Receiver", kind: "address", placeholder: "0x..." }],
   },
   {
     id: "withdraw-fees",

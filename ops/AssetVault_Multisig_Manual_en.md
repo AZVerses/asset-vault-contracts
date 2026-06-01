@@ -68,7 +68,7 @@ Key points:
 - For a new receiver, prefer a small-value test before first large transfer.
 - Do not use unnecessary browser extensions on production machines.
 - Do not ask others to review raw calldata without also providing function signature and parameter meaning.
-- Review signer lists, receiver allowlists, validator sets, and address registry at least monthly.
+- Review signer lists, rebalance receiver settings, validator sets, and address registry at least monthly.
 
 ## Lark Approval
 
@@ -125,9 +125,7 @@ These must be filled in before the manual is distributed to operators:
 - Hash ID: `0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775`
 - Responsibilities:
   - `updatePendingWithdrawChallengePeriod(uint256)`: updates the pending withdrawal challenge period
-  - `addRebalanceReceiver(address)`: adds an address to the rebalance receiver allowlist
-  - `removeRebalanceReceiver(address)`: removes an address from the rebalance receiver allowlist
-  - `setRebalanceReceiver(address)`: sets the active `rebalanceWithdraw` receiver from the allowlist
+  - `setRebalanceReceiver(address)`: sets the fixed receiver for `rebalanceWithdraw`
   - `withdrawFees(address[],address)`: withdraws accumulated protocol fees
 
 ## TOKEN_ROLE
@@ -267,28 +265,7 @@ Only `upgradeToAndCall` is timelocked and must be handled as two layers of calld
 - Parameters:
   - `newReceiver`: new rebalance receiver
 - Review focus:
-  - `newReceiver` must already be in the rebalance receiver allowlist
   - `newReceiver` must come from the internal address registry
-
-### addRebalanceReceiver
-
-- Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
-- Parameters:
-  - `receiver`: rebalance receiver address to add to the allowlist
-- Review focus:
-  - once allowlisted, this address can be selected as the active rebalance receiver
-  - source and business purpose must match the approval record
-
-### removeRebalanceReceiver
-
-- Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
-- Parameters:
-  - `receiver`: rebalance receiver address to remove from the allowlist
-- Review focus:
-  - the current active rebalance receiver cannot be removed directly
-  - switch the active receiver first before removing the old one
 
 ### withdrawFees
 

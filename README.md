@@ -23,8 +23,7 @@ The contract is UUPS-upgradeable and built around role-based access control plus
 ### `ADMIN_ROLE`
 
 - updates `pendingWithdrawChallengePeriod`
-- manages the rebalance receiver allowlist
-- sets the active `rebalanceReceiver`
+- sets `rebalanceReceiver`
 - withdraws accumulated fees
 
 ### `VALIDATOR_ROLE`
@@ -232,7 +231,7 @@ Conditions:
 - vault must not be globally paused
 - token must be supported
 - vault must have enough balance
-- `rebalanceReceiver` must be set and allowlisted
+- `rebalanceReceiver` must be set
 - validator signatures must satisfy the configured validator set and required power
 
 Behavior:

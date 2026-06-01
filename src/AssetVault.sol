@@ -87,8 +87,6 @@ contract AssetVault is
     error WithdrawalAlreadyExecuted();
     error NonceAlreadyUsed();
     error InsufficientVaultBalance();
-    error RebalanceReceiverInUse();
-
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
     bytes32 public constant VALIDATOR_ROLE = keccak256("VALIDATOR_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE");
@@ -110,7 +108,6 @@ contract AssetVault is
 
     mapping(uint256 => bool) public nonceUsed;
     address public rebalanceReceiver;
-    mapping(address => bool) public allowedRebalanceReceivers;
 
     event DepositETH(address account, uint256 amount);
     event DepositOnBehalf(
@@ -195,7 +192,6 @@ contract AssetVault is
         uint256 oldValue,
         uint256 newValue
     );
-    event RebalanceReceiverAllowlistUpdated(address receiver, bool allowed);
     event RebalanceReceiverUpdated(address oldReceiver, address newReceiver);
     event RebalanceWithdrawExecuted(
         address receiver,
@@ -237,40 +233,10 @@ contract AssetVault is
         emit PendingWithdrawChallengePeriodUpdated(oldValue, newValue);
     }
 
-    function addRebalanceReceiver(
-        address receiver
-    ) external onlyRole(ADMIN_ROLE) {
-        if (
-            receiver == address(0) || allowedRebalanceReceivers[receiver]
-        ) {
-            revert InvalidParameters();
-        }
-        allowedRebalanceReceivers[receiver] = true;
-        emit RebalanceReceiverAllowlistUpdated(receiver, true);
-    }
-
-    function removeRebalanceReceiver(
-        address receiver
-    ) external onlyRole(ADMIN_ROLE) {
-        if (
-            receiver == address(0) || !allowedRebalanceReceivers[receiver]
-        ) {
-            revert InvalidParameters();
-        }
-        if (receiver == rebalanceReceiver) {
-            revert RebalanceReceiverInUse();
-        }
-        delete allowedRebalanceReceivers[receiver];
-        emit RebalanceReceiverAllowlistUpdated(receiver, false);
-    }
-
     function setRebalanceReceiver(
         address newReceiver
     ) external onlyRole(ADMIN_ROLE) {
-        if (
-            newReceiver == address(0) ||
-            !allowedRebalanceReceivers[newReceiver]
-        ) {
+        if (newReceiver == address(0)) {
             revert InvalidParameters();
         }
         address oldReceiver = rebalanceReceiver;
@@ -515,9 +481,7 @@ contract AssetVault is
         uint256 nonce
     ) external whenNotPaused onlyRole(OPERATOR_ROLE) nonReentrant {
         address receiver = rebalanceReceiver;
-        if (
-            receiver == address(0) || !allowedRebalanceReceivers[receiver]
-        ) {
+        if (receiver == address(0)) {
             revert InvalidParameters();
         }
 
