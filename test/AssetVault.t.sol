@@ -238,6 +238,7 @@ contract AssetVaultTest is Test {
     function test_DepositOnBehalf_ERC20_EmitsExpectedEvent() public {
         address forAccount = address(0x90);
         uint256 amount = 100e18;
+        bytes memory data = hex"1234";
 
         token1.mint(depositRole, amount);
 
@@ -249,9 +250,10 @@ contract AssetVaultTest is Test {
             depositRole,
             forAccount,
             address(token1),
-            amount
+            amount,
+            data
         );
-        vault.depositOnBehalf(address(token1), forAccount, amount);
+        vault.depositOnBehalf(address(token1), forAccount, amount, data);
         vm.stopPrank();
 
         assertEq(token1.balanceOf(address(vault)), amount);
@@ -260,6 +262,7 @@ contract AssetVaultTest is Test {
     function test_DepositOnBehalf_Native_EmitsExpectedEvent() public {
         address forAccount = address(0x91);
         uint256 amount = 2e18;
+        bytes memory data = hex"deadbeef";
 
         vm.deal(depositRole, amount);
         vm.expectEmit(true, true, true, true);
@@ -267,11 +270,12 @@ contract AssetVaultTest is Test {
             depositRole,
             forAccount,
             address(0),
-            amount
+            amount,
+            data
         );
 
         vm.prank(depositRole);
-        vault.depositOnBehalf{value: amount}(address(0), forAccount, amount);
+        vault.depositOnBehalf{value: amount}(address(0), forAccount, amount, data);
 
         assertEq(address(vault).balance, amount);
     }
@@ -282,7 +286,7 @@ contract AssetVaultTest is Test {
         vm.startPrank(user);
         token1.approve(address(vault), 10e18);
         vm.expectRevert();
-        vault.depositOnBehalf(address(token1), address(0x92), 10e18);
+        vault.depositOnBehalf(address(token1), address(0x92), 10e18, "");
         vm.stopPrank();
     }
 
@@ -295,7 +299,7 @@ contract AssetVaultTest is Test {
         vm.startPrank(depositRole);
         token1.approve(address(vault), 10e18);
         vm.expectRevert();
-        vault.depositOnBehalf(address(token1), address(0x93), 10e18);
+        vault.depositOnBehalf(address(token1), address(0x93), 10e18, "");
         vm.stopPrank();
     }
 

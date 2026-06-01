@@ -48,7 +48,6 @@ const App = () => {
   const [timelockSalt, setTimelockSalt] = useState(ZERO_HASH);
   const [timelockPredecessor, setTimelockPredecessor] = useState(ZERO_HASH);
   const [decodeInput, setDecodeInput] = useState("");
-  const [timelockDecodeInput, setTimelockDecodeInput] = useState("");
   const [generatedCalldata, setGeneratedCalldata] = useState("");
   const [generatedTimelockCalldata, setGeneratedTimelockCalldata] = useState("");
   const [lastError, setLastError] = useState("");
@@ -83,7 +82,6 @@ const App = () => {
     setGeneratedCalldata("");
     setGeneratedTimelockCalldata("");
     setDecodeInput("");
-    setTimelockDecodeInput("");
     setLastError("");
     setFormState(buildInitialFormState(nextOperation));
   };
@@ -154,7 +152,7 @@ const App = () => {
   };
 
   const decodedDirectRows = useMemo(() => {
-    if (!decodeInput.trim()) {
+    if (operation.mode !== "direct" || !decodeInput.trim()) {
       return [];
     }
     try {
@@ -170,27 +168,52 @@ const App = () => {
     }
   }, [decodeInput, operation]);
 
-  const decodedTimelockRows = useMemo(() => {
-    if (operation.mode !== "timelock-upgrade" || !timelockDecodeInput.trim()) {
-      return [];
+  const decodedTimelockData = useMemo(() => {
+    if (operation.mode !== "timelock-upgrade" || !decodeInput.trim()) {
+      return null;
     }
     try {
       const abiJson = timelockAction === "schedule" ? timelockAbis.schedule : timelockAbis.execute;
-      const decoded = decodeFunctionData(abiJson, timelockAction, timelockDecodeInput.trim());
+      const decoded = decodeFunctionData(abiJson, timelockAction, decodeInput.trim());
       setLastError("");
-      const labels =
-        timelockAction === "schedule"
-          ? ["Target", "Value", "Data", "Predecessor", "Salt", "Delay"]
-          : ["Target", "Value", "Data", "Predecessor", "Salt"];
-      return labels.map((label, index) => ({
-        label,
+      return decoded;
+    } catch (error) {
+      setLastError(error instanceof Error ? error.message : "Failed to decode Timelock calldata.");
+      return null;
+    }
+  }, [decodeInput, operation.mode, timelockAction]);
+
+  const decodedTimelockRows = useMemo(() => {
+    if (!decodedTimelockData) {
+      return [];
+    }
+    const labels =
+      timelockAction === "schedule"
+        ? ["Target", "Value", "Data", "Predecessor", "Salt", "Delay"]
+        : ["Target", "Value", "Data", "Predecessor", "Salt"];
+    return labels.map((label, index) => ({
+      label,
+      value: formatDecodedValue(decodedTimelockData[index]),
+    }));
+  }, [decodedTimelockData, timelockAction]);
+
+  const decodedInnerRows = useMemo(() => {
+    if (operation.mode !== "timelock-upgrade" || !decodedTimelockData) {
+      return [];
+    }
+    try {
+      const innerCalldata = String(decodedTimelockData[2]);
+      const decoded = decodeFunctionData(operation.abiJson, operation.functionName, innerCalldata);
+      setLastError("");
+      return operation.params.map((param, index) => ({
+        label: param.label,
         value: formatDecodedValue(decoded[index]),
       }));
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : "Failed to decode Timelock calldata.");
+      setLastError(error instanceof Error ? error.message : "Failed to decode inner business calldata.");
       return [];
     }
-  }, [operation.mode, timelockAction, timelockDecodeInput]);
+  }, [decodedTimelockData, operation]);
 
   return (
     <div className="shell compact-shell">
@@ -452,7 +475,7 @@ const App = () => {
               ) : null}
 
               <label className="field field-full">
-                <span>{operation.mode === "direct" ? "Direct calldata" : "Inner business calldata"}</span>
+                <span>{operation.mode === "direct" ? "Direct calldata" : "Timelock calldata"}</span>
                 <textarea
                   rows={6}
                   value={decodeInput}
@@ -460,18 +483,6 @@ const App = () => {
                   placeholder="0x..."
                 />
               </label>
-
-              {operation.mode === "timelock-upgrade" ? (
-                <label className="field field-full">
-                  <span>Timelock calldata</span>
-                  <textarea
-                    rows={6}
-                    value={timelockDecodeInput}
-                    onChange={(event) => setTimelockDecodeInput(event.target.value)}
-                    placeholder="0x..."
-                  />
-                </label>
-              ) : null}
             </div>
           )}
 
@@ -522,9 +533,17 @@ const App = () => {
               {operation.mode === "timelock-upgrade" ? (
                 <div className="subpanel compact-panel">
                   <div className="section-heading compact">
-                    <h3>Decoded Timelock calldata</h3>
+                    <h3>Decoded outer Timelock calldata</h3>
                   </div>
                   <DecodedRows rows={decodedTimelockRows} />
+                </div>
+              ) : null}
+              {operation.mode === "timelock-upgrade" ? (
+                <div className="subpanel compact-panel">
+                  <div className="section-heading compact">
+                    <h3>Decoded inner business calldata</h3>
+                  </div>
+                  <DecodedRows rows={decodedInnerRows} />
                 </div>
               ) : null}
             </div>

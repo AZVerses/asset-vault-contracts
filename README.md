@@ -220,7 +220,7 @@ Native path:
 
 Behavior:
 
-- emits `DepositOnBehalf(caller, forAccount, token, amount)`
+- emits `DepositOnBehalf(caller, forAccount, token, amount, data)`
 - `forAccount` is event attribution only; the vault does not maintain a per-user balance ledger
 
 ### `rebalanceWithdraw`

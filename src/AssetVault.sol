@@ -114,7 +114,8 @@ contract AssetVault is
         address caller,
         address indexed forAccount,
         address indexed token,
-        uint256 amount
+        uint256 amount,
+        bytes data
     );
 
     event TokenAdded(
@@ -371,7 +372,8 @@ contract AssetVault is
     function depositOnBehalf(
         address token,
         address forAccount,
-        uint256 amount
+        uint256 amount,
+        bytes calldata data
     ) external payable whenNotPaused onlyRole(DEPOSIT_ROLE) nonReentrant {
         if (forAccount == address(0)) {
             revert InvalidParameters();
@@ -398,7 +400,7 @@ contract AssetVault is
             );
         }
 
-        emit DepositOnBehalf(msg.sender, forAccount, token, amount);
+        emit DepositOnBehalf(msg.sender, forAccount, token, amount, data);
     }
 
     struct RequestWithdrawLocalVars {
