@@ -1,0 +1,202 @@
+{
+  "chains": {
+    "arb1": {
+      "chainId": 42161,
+      "vault": "0xf105063609cbd63977d9c2bee0142c10fe3d27e8",
+      "roleOrder": [
+        "defaultAdmin",
+        "admin",
+        "token",
+        "validator",
+        "deposit",
+        "pause",
+        "operator",
+        "upgrade"
+      ],
+      "roles": {
+        "defaultAdmin": {
+          "name": "DEFAULT_ADMIN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revokeFrom": []
+        },
+        "admin": {
+          "name": "ADMIN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "revokeFrom": []
+        },
+        "token": {
+          "name": "TOKEN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "revokeFrom": []
+        },
+        "validator": {
+          "name": "VALIDATOR_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xdddddddddddddddddddddddddddddddddddddddd",
+          "revokeFrom": []
+        },
+        "deposit": {
+          "name": "DEPOSIT_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "revokeFrom": []
+        },
+        "pause": {
+          "name": "PAUSE_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xffffffffffffffffffffffffffffffffffffffff",
+          "revokeFrom": []
+        },
+        "operator": {
+          "name": "OPERATOR_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0x1111111111111111111111111111111111111111",
+          "revokeFrom": []
+        },
+        "upgrade": {
+          "name": "UPGRADE_ROLE",
+          "holderType": "TIMELOCK",
+          "safe": "0x2222222222222222222222222222222222222222",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
+          "revokeFrom": []
+        }
+      }
+    },
+    "arbSepolia": {
+      "chainId": 421614,
+      "vault": "0xf2137a2d64ba4dafcab54959862f7384ed7be100",
+      "roleOrder": [
+        "defaultAdmin",
+        "admin",
+        "token",
+        "validator",
+        "deposit",
+        "pause",
+        "operator",
+        "upgrade"
+      ],
+      "roles": {
+        "defaultAdmin": {
+          "name": "DEFAULT_ADMIN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revokeFrom": []
+        },
+        "admin": {
+          "name": "ADMIN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "revokeFrom": []
+        },
+        "token": {
+          "name": "TOKEN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "revokeFrom": []
+        },
+        "validator": {
+          "name": "VALIDATOR_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xdddddddddddddddddddddddddddddddddddddddd",
+          "revokeFrom": []
+        },
+        "deposit": {
+          "name": "DEPOSIT_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "revokeFrom": []
+        },
+        "pause": {
+          "name": "PAUSE_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xffffffffffffffffffffffffffffffffffffffff",
+          "revokeFrom": []
+        },
+        "operator": {
+          "name": "OPERATOR_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0x1111111111111111111111111111111111111111",
+          "revokeFrom": []
+        },
+        "upgrade": {
+          "name": "UPGRADE_ROLE",
+          "holderType": "TIMELOCK",
+          "safe": "0x2222222222222222222222222222222222222222",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
+          "revokeFrom": []
+        }
+      }
+    },
+    "ethSepolia": {
+      "chainId": 11155111,
+      "vault": "0xcae91ee34ef8a1076229d9e6dbc6b1ec6248671d",
+      "roleOrder": [
+        "defaultAdmin",
+        "admin",
+        "token",
+        "validator",
+        "deposit",
+        "pause",
+        "operator",
+        "upgrade"
+      ],
+      "roles": {
+        "defaultAdmin": {
+          "name": "DEFAULT_ADMIN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revokeFrom": []
+        },
+        "admin": {
+          "name": "ADMIN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "revokeFrom": []
+        },
+        "token": {
+          "name": "TOKEN_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "revokeFrom": []
+        },
+        "validator": {
+          "name": "VALIDATOR_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xdddddddddddddddddddddddddddddddddddddddd",
+          "revokeFrom": []
+        },
+        "deposit": {
+          "name": "DEPOSIT_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "revokeFrom": []
+        },
+        "pause": {
+          "name": "PAUSE_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0xffffffffffffffffffffffffffffffffffffffff",
+          "revokeFrom": []
+        },
+        "operator": {
+          "name": "OPERATOR_ROLE",
+          "holderType": "DIRECT_SAFE",
+          "safe": "0x1111111111111111111111111111111111111111",
+          "revokeFrom": []
+        },
+        "upgrade": {
+          "name": "UPGRADE_ROLE",
+          "holderType": "TIMELOCK",
+          "safe": "0x2222222222222222222222222222222222222222",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
+          "revokeFrom": []
+        }
+      }
+    }
+  }
+}
