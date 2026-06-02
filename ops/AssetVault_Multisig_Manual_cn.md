@@ -8,7 +8,7 @@
 - Safe 网页端的填写方式
 - Lark 审批流程要求
 
-除 `UPGRADE_ROLE` 外，其余高权限操作均为 Safe 直连 `Vault Proxy`。
+`ADMIN_ROLE` 和 `UPGRADE_ROLE` 必须经过 Timelock，其余高权限操作为 Safe 直连 `Vault Proxy`。
 
 # 治理结构
 
@@ -16,7 +16,7 @@
 
 - `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `UPGRADE_ROLE`
 - `Governance Safe (4/7)` -> `DEFAULT_ADMIN_ROLE`
-- `Admin Safe (4/7)` -> `ADMIN_ROLE`
+- `Admin Safe (4/7)` -> `Admin Timelock (72h)` -> `ADMIN_ROLE`
 - `Token Safe (4/7)` -> `TOKEN_ROLE`
 - `Validator Safe (4/7)` -> `VALIDATOR_ROLE`
 - `Emergency Guardian Safe (3/5)` -> `PAUSE_ROLE`
@@ -26,8 +26,9 @@
 关键说明：
 
 - 只有 `UPGRADE_ROLE` 负责合约升级，且必须经过 Timelock。
+- `ADMIN_ROLE` 负责挑战期、rebalance receiver 和手续费提取，也必须经过 Timelock。
 - `DEFAULT_ADMIN_ROLE` 不负责合约升级。
-- `ADMIN_ROLE`、`TOKEN_ROLE`、`VALIDATOR_ROLE`、`PAUSE_ROLE` 都是 Safe 直连 `Vault Proxy`。
+- `TOKEN_ROLE`、`VALIDATOR_ROLE`、`PAUSE_ROLE` 是 Safe 直连 `Vault Proxy`。
 - validator 轮换时，必须先 `addValidators`，确认新集合可用后，再 `removeValidators` 旧集合。
 
 # 基础安全规范
@@ -47,7 +48,7 @@
 - 检查浏览器地址栏证书是否正常，避免在仿冒站点签名。
 - 检查当前连接的钱包是不是本次应使用的硬件钱包。
 - 检查 Safe 页面左上角展示的链和 Safe 地址，确认不是测试网、不是其他 Safe。
-- 检查 `To` 地址到底是 `Vault Proxy` 还是 `Governance Timelock`，不要填反。
+- 检查 `To` 地址到底是 `Vault Proxy`、`Admin Timelock` 还是 `Governance Timelock`，不要填反。
 - 对于新的 receiver / treasury / validator / implementation 地址，至少做两种独立来源核验：
   - 官方官网、官方文档、官方 GitHub、官方公告
   - 区块浏览器已验证合约页面
@@ -74,7 +75,7 @@
 
 - 所有生产高权限操作都应先走 Lark 审批流程，再进入 Safe 或 Safe + Timelock 执行。
 - 审批记录至少应包含：操作名称、目标链、目标合约、目标函数、参数明细、业务原因、风险说明、交易哈希。
-- 升级类操作应额外记录：`salt`、`schedule` 交易哈希、`execute` 交易哈希。
+- Timelock 操作应额外记录：`salt`、`schedule` 交易哈希、`execute` 交易哈希。
 - Lark 审批记录应能和最终链上交易一一对应，便于回溯。
 
 # 链上地址
@@ -82,7 +83,7 @@
 ## Vault Proxy
 
 - Arbitrum One `42161`
-  - Vault Proxy: `0xf105063609cbd63977d9c2bee0142c10fe3d27e8`
+  - Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
 - Arbitrum Sepolia `421614`
   - Vault Proxy: `0xf2137a2d64ba4dafcab54959862f7384ed7be100`
 - Ethereum Sepolia `11155111`
@@ -95,6 +96,7 @@
 - `Governance Safe`
 - `Governance Timelock`
 - `Admin Safe`
+- `Admin Timelock`
 - `Token Safe`
 - `Validator Safe`
 - `Emergency Guardian Safe`
@@ -120,8 +122,8 @@
 
 ## ADMIN_ROLE
 
-- Holder: `Admin Safe`
-- Upstream signer threshold: `4/7`
+- Holder: `Admin Timelock (72h)`
+- Upstream signer threshold: `Admin Safe 4/7`
 - Hash ID: `0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775`
 - Responsibilities:
   - `updatePendingWithdrawChallengePeriod(uint256)`: 修改 pending withdrawal 的挑战期长度。
@@ -191,14 +193,14 @@
 
 ### Timelock 型操作
 
-只有 `upgradeToAndCall` 经过 Timelock，必须按两层 calldata 处理。
+`ADMIN_ROLE` 和 `UPGRADE_ROLE` 操作都经过 Timelock，必须按两层 calldata 处理。
 
-1. 先在 checker 中选择 `upgradeToAndCall`，填写 `newImplementation` 和 `data`，生成 inner calldata。
+1. 先在 checker 中选择目标操作并填写业务参数，生成 inner calldata。
 2. 确认 inner calldata 的 `To` 是 `Vault Proxy`。
 3. 再继续生成 Timelock 的 outer calldata：
    - `schedule`
    - `execute`
-4. 确认 outer calldata 的 `To` 是 `Governance Timelock`，不是 `Vault Proxy`。
+4. 确认 outer calldata 的 `To` 是该操作对应的 Timelock，不能填成 `Vault Proxy`。
 5. 对 `schedule` 和 `execute`，必须重点核对：
    - `target` 是否为 `Vault Proxy`
    - `data` 是否与 inner calldata 完全一致
@@ -214,7 +216,7 @@
 - Safe 中实际填写的参数、checker `Encode` 结果、Safe `Review` 的 `Data`、checker `Decode` 结果，四者必须一致。
 - 对于地址类参数，除了解码正确，还要核对地址用途是否和审批一致，例如 treasury、receiver、validator、implementation。
 - 对于数组和 validator 集合，必须逐项核对顺序和数值，不能只看首尾几项。
-- 对于升级操作，必须同时保存 inner calldata、`schedule` 交易哈希、`execute` 交易哈希和 `salt`。
+- 对于 Timelock 操作，必须同时保存 inner calldata、`schedule` 交易哈希、`execute` 交易哈希和 `salt`。
 
 ## 支持的操作
 
@@ -254,14 +256,14 @@
 ### updatePendingWithdrawChallengePeriod
 
 - Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
+- Path: `Admin Safe -> Admin Timelock -> Vault Proxy`
 - Parameters:
   - `newValue`: 新 challenge period 秒数
 
 ### setRebalanceReceiver
 
 - Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
+- Path: `Admin Safe -> Admin Timelock -> Vault Proxy`
 - Parameters:
   - `newReceiver`: 新的 rebalance 收款地址
 - 复核重点：
@@ -270,7 +272,7 @@
 ### withdrawFees
 
 - Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
+- Path: `Admin Safe -> Admin Timelock -> Vault Proxy`
 - Parameters:
   - `tokens`: 要提取手续费的 token 地址数组，原生币用 `address(0)`
   - `to`: 手续费接收地址

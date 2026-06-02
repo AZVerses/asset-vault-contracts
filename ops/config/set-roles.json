@@ -2,7 +2,7 @@
   "chains": {
     "arb1": {
       "chainId": 42161,
-      "vault": "0xf105063609cbd63977d9c2bee0142c10fe3d27e8",
+      "vault": "0xAB3D96237328385f8988166c6d7788a63f48dDa6",
       "roleOrder": [
         "defaultAdmin",
         "admin",
@@ -17,49 +17,51 @@
         "defaultAdmin": {
           "name": "DEFAULT_ADMIN_ROLE",
           "holderType": "DIRECT_SAFE",
-          "safe": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
           "revokeFrom": []
         },
         "admin": {
           "name": "ADMIN_ROLE",
-          "holderType": "DIRECT_SAFE",
-          "safe": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "holderType": "TIMELOCK",
+          "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
           "revokeFrom": []
         },
         "token": {
           "name": "TOKEN_ROLE",
           "holderType": "DIRECT_SAFE",
-          "safe": "0xcccccccccccccccccccccccccccccccccccccccc",
+          "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
           "revokeFrom": []
         },
         "validator": {
           "name": "VALIDATOR_ROLE",
           "holderType": "DIRECT_SAFE",
-          "safe": "0xdddddddddddddddddddddddddddddddddddddddd",
+          "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
           "revokeFrom": []
         },
         "deposit": {
           "name": "DEPOSIT_ROLE",
           "holderType": "DIRECT_SAFE",
-          "safe": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
           "revokeFrom": []
         },
         "pause": {
           "name": "PAUSE_ROLE",
           "holderType": "DIRECT_SAFE",
-          "safe": "0xffffffffffffffffffffffffffffffffffffffff",
+          "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
           "revokeFrom": []
         },
         "operator": {
           "name": "OPERATOR_ROLE",
           "holderType": "DIRECT_SAFE",
-          "safe": "0x1111111111111111111111111111111111111111",
+          "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
           "revokeFrom": []
         },
         "upgrade": {
           "name": "UPGRADE_ROLE",
           "holderType": "TIMELOCK",
-          "safe": "0x2222222222222222222222222222222222222222",
+          "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
           "timelock": "0x0000000000000000000000000000000000000000",
           "minDelay": 259200,
           "revokeFrom": []
@@ -88,8 +90,10 @@
         },
         "admin": {
           "name": "ADMIN_ROLE",
-          "holderType": "DIRECT_SAFE",
+          "holderType": "TIMELOCK",
           "safe": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
           "revokeFrom": []
         },
         "token": {
@@ -154,8 +158,10 @@
         },
         "admin": {
           "name": "ADMIN_ROLE",
-          "holderType": "DIRECT_SAFE",
+          "holderType": "TIMELOCK",
           "safe": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
           "revokeFrom": []
         },
         "token": {

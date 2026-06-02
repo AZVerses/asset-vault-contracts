@@ -18,7 +18,7 @@ import {AssetVault} from "../src/AssetVault.sol";
 //    SET_ROLES_CONFIG_PATH=/abs/path/to/set-roles.json forge script ...
 //
 // Notes:
-// - `UPGRADE_ROLE` is expected to be timelock-backed.
+// - `ADMIN_ROLE` and `UPGRADE_ROLE` are expected to be timelock-backed.
 // - Existing timelock delay mismatches are treated as blockers, because OZ timelock delay can only be updated
 //   by the timelock itself through a scheduled self-call.
 contract SetRoles is Script {
@@ -54,10 +54,6 @@ contract SetRoles is Script {
 
     function run() external {
         bool forceSet = vm.envOr("FORCE_SET", false);
-        _run(forceSet);
-    }
-
-    function run(bool forceSet) external {
         _run(forceSet);
     }
 

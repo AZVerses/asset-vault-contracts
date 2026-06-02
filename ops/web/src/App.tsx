@@ -59,6 +59,11 @@ const App = () => {
     () => operations.find((item) => item.id === operationId) ?? operations[0],
     [operationId],
   );
+  const isTimelocked = operation.mode === "timelock";
+  const timelockTarget =
+    operation.timelockType === "admin" ? chain.adminTimelock : chain.governanceTimelock;
+  const timelockLabel =
+    operation.timelockType === "admin" ? "Admin Timelock" : "Governance Timelock";
 
   useEffect(() => {
     if (!copyNotice) {
@@ -127,7 +132,7 @@ const App = () => {
       setGeneratedCalldata(calldata);
       setLastError("");
 
-      if (operation.mode === "timelock-upgrade") {
+      if (isTimelocked) {
         const timelockIface = new Interface(
           timelockAction === "schedule" ? timelockAbis.schedule : timelockAbis.execute,
         );
@@ -169,7 +174,7 @@ const App = () => {
   }, [decodeInput, operation]);
 
   const decodedTimelockData = useMemo(() => {
-    if (operation.mode !== "timelock-upgrade" || !decodeInput.trim()) {
+    if (!isTimelocked || !decodeInput.trim()) {
       return null;
     }
     try {
@@ -181,7 +186,7 @@ const App = () => {
       setLastError(error instanceof Error ? error.message : "Failed to decode Timelock calldata.");
       return null;
     }
-  }, [decodeInput, operation.mode, timelockAction]);
+  }, [decodeInput, isTimelocked, timelockAction]);
 
   const decodedTimelockRows = useMemo(() => {
     if (!decodedTimelockData) {
@@ -198,7 +203,7 @@ const App = () => {
   }, [decodedTimelockData, timelockAction]);
 
   const decodedInnerRows = useMemo(() => {
-    if (operation.mode !== "timelock-upgrade" || !decodedTimelockData) {
+    if (!isTimelocked || !decodedTimelockData) {
       return [];
     }
     try {
@@ -213,7 +218,7 @@ const App = () => {
       setLastError(error instanceof Error ? error.message : "Failed to decode inner business calldata.");
       return [];
     }
-  }, [decodedTimelockData, operation]);
+  }, [decodedTimelockData, isTimelocked, operation]);
 
   return (
     <div className="shell compact-shell">
@@ -257,6 +262,10 @@ const App = () => {
               <div className="chain-info-item">
                 <span>Vault Proxy</span>
                 <code>{chain.vaultProxy}</code>
+              </div>
+              <div className="chain-info-item">
+                <span>Admin Timelock</span>
+                <code>{chain.adminTimelock}</code>
               </div>
               <div className="chain-info-item">
                 <span>Governance Timelock</span>
@@ -328,7 +337,7 @@ const App = () => {
               <div className="badge-stack">
                 <span className="badge">{operation.role}</span>
                 <span className="badge soft">
-                  {operation.mode === "direct" ? "Vault Proxy" : "Timelock"}
+                  {operation.mode === "direct" ? "Vault Proxy" : timelockLabel}
                 </span>
               </div>
             </div>
@@ -339,19 +348,19 @@ const App = () => {
                 <strong>{chain.vaultProxy}</strong>
                 <small>Vault Proxy</small>
               </div>
-              {operation.mode === "timelock-upgrade" ? (
+              {isTimelocked ? (
                 <div className="detail-card compact">
                   <span>Outer Target</span>
-                  <strong>{chain.governanceTimelock}</strong>
-                  <small>Governance Timelock</small>
+                  <strong>{timelockTarget}</strong>
+                  <small>{timelockLabel}</small>
                 </div>
               ) : null}
               <div className="detail-card compact">
                 <span>Function Signature</span>
                 <strong>{operation.functionSignature}</strong>
-                <small>{operation.mode === "timelock-upgrade" ? "Inner business function" : "Direct function"}</small>
+                <small>{isTimelocked ? "Inner business function" : "Direct function"}</small>
               </div>
-              {operation.mode === "timelock-upgrade" ? (
+              {isTimelocked ? (
                 <div className="detail-card compact">
                   <span>Delay</span>
                   <strong>{chain.timelockDelaySeconds}s</strong>
@@ -390,7 +399,7 @@ const App = () => {
                 ))}
               </div>
 
-              {operation.mode === "timelock-upgrade" ? (
+              {isTimelocked ? (
                 <div className="timelock-box">
                   <div className="timelock-header">
                     <h3>Timelock wrapper</h3>
@@ -445,7 +454,7 @@ const App = () => {
             <div className="compact-stack">
               <CodeBlock title="ABI JSON" value={operation.abiJson} onCopy={handleCopy} />
 
-              {operation.mode === "timelock-upgrade" ? (
+              {isTimelocked ? (
                 <div className="decode-switch-row">
                   <div className="segmented">
                     <button
@@ -466,7 +475,7 @@ const App = () => {
                 </div>
               ) : null}
 
-              {operation.mode === "timelock-upgrade" ? (
+              {isTimelocked ? (
                 <CodeBlock
                   title={`${timelockAction} ABI JSON`}
                   value={timelockAction === "schedule" ? timelockAbis.schedule : timelockAbis.execute}
@@ -506,17 +515,17 @@ const App = () => {
                 subtitle={
                   operation.mode === "direct"
                     ? "Vault Proxy target"
-                    : "Upgrade function calldata for Vault Proxy"
+                    : "Business function calldata for Vault Proxy"
                 }
                 target={chain.vaultProxy}
                 calldata={generatedCalldata}
                 onCopy={handleCopy}
               />
-              {operation.mode === "timelock-upgrade" ? (
+              {isTimelocked ? (
                 <OutputCard
                   title={`Outer ${timelockAction} calldata`}
-                  subtitle="Governance Timelock target"
-                  target={chain.governanceTimelock}
+                  subtitle={`${timelockLabel} target`}
+                  target={timelockTarget}
                   calldata={generatedTimelockCalldata}
                   onCopy={handleCopy}
                 />
@@ -524,13 +533,15 @@ const App = () => {
             </div>
           ) : (
             <div className="result-layout">
-              <div className="subpanel compact-panel">
-                <div className="section-heading compact">
-                  <h3>{operation.mode === "direct" ? "Decoded parameters" : "Decoded inner calldata"}</h3>
+              {operation.mode === "direct" ? (
+                <div className="subpanel compact-panel">
+                  <div className="section-heading compact">
+                    <h3>Decoded parameters</h3>
+                  </div>
+                  <DecodedRows rows={decodedDirectRows} />
                 </div>
-                <DecodedRows rows={decodedDirectRows} />
-              </div>
-              {operation.mode === "timelock-upgrade" ? (
+              ) : null}
+              {isTimelocked ? (
                 <div className="subpanel compact-panel">
                   <div className="section-heading compact">
                     <h3>Decoded outer Timelock calldata</h3>
@@ -538,7 +549,7 @@ const App = () => {
                   <DecodedRows rows={decodedTimelockRows} />
                 </div>
               ) : null}
-              {operation.mode === "timelock-upgrade" ? (
+              {isTimelocked ? (
                 <div className="subpanel compact-panel">
                   <div className="section-heading compact">
                     <h3>Decoded inner business calldata</h3>

@@ -4,11 +4,11 @@ Static React tool for production operators.
 
 It supports:
 
-- per-chain fixed `Vault Proxy` and `Governance Timelock` targets
+- per-chain fixed `Vault Proxy`, `Admin Timelock`, and `Governance Timelock` targets
 - whitelisted multisig operations only
 - ABI JSON display for each operation
 - calldata encode for direct Safe actions
-- two-step calldata encode for `upgradeToAndCall` through OpenZeppelin `TimelockController`
+- two-step calldata encode for `ADMIN_ROLE` and `UPGRADE_ROLE` actions through OpenZeppelin `TimelockController`
 - calldata decode for pasted direct or timelock calldata
 
 ## Local development

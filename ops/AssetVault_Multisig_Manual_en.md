@@ -8,7 +8,7 @@ This document is for production operators, signers, and reviewers. It covers:
 - How to fill transactions in the Safe web UI
 - Lark approval requirements
 
-Except for `UPGRADE_ROLE`, all privileged actions should be executed by Safe directly against the `Vault Proxy`.
+`ADMIN_ROLE` and `UPGRADE_ROLE` must go through Timelock. Other privileged actions are direct Safe-to-`Vault Proxy` paths.
 
 # Governance Structure
 
@@ -16,7 +16,7 @@ Recommended setup:
 
 - `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `UPGRADE_ROLE`
 - `Governance Safe (4/7)` -> `DEFAULT_ADMIN_ROLE`
-- `Admin Safe (4/7)` -> `ADMIN_ROLE`
+- `Admin Safe (4/7)` -> `Admin Timelock (72h)` -> `ADMIN_ROLE`
 - `Token Safe (4/7)` -> `TOKEN_ROLE`
 - `Validator Safe (4/7)` -> `VALIDATOR_ROLE`
 - `Emergency Guardian Safe (3/5)` -> `PAUSE_ROLE`
@@ -26,8 +26,9 @@ Recommended setup:
 Key points:
 
 - Only `UPGRADE_ROLE` is used for contract upgrades, and it must be timelocked.
+- `ADMIN_ROLE` controls challenge period, rebalance receiver, and fee withdrawal, and it must also be timelocked.
 - `DEFAULT_ADMIN_ROLE` is not used for upgrades.
-- `ADMIN_ROLE`, `TOKEN_ROLE`, `VALIDATOR_ROLE`, and `PAUSE_ROLE` are all direct Safe-to-`Vault Proxy` paths.
+- `TOKEN_ROLE`, `VALIDATOR_ROLE`, and `PAUSE_ROLE` are direct Safe-to-`Vault Proxy` paths.
 - For validator rotation, always `addValidators` first, confirm the new set works, then `removeValidators` the old set.
 
 # Security Requirements
@@ -47,7 +48,7 @@ Key points:
 - Check the browser certificate and avoid signing on lookalike sites.
 - Confirm the connected wallet is the intended hardware wallet.
 - Confirm the chain and Safe address shown in the Safe UI are correct.
-- Confirm whether `To` should be `Vault Proxy` or `Governance Timelock`.
+- Confirm whether `To` should be `Vault Proxy`, `Admin Timelock`, or `Governance Timelock`.
 - For any new receiver / treasury / validator / implementation address, verify from at least two independent sources:
   - Official website, docs, GitHub, or announcement
   - Verified contract page on a block explorer
@@ -74,7 +75,7 @@ Key points:
 
 - All privileged production actions must go through a Lark approval process before Safe or Safe + Timelock execution.
 - Approval records should include at least: operation name, target chain, target contract, target function, parameters, business reason, risk notes, and transaction hash.
-- Upgrade actions should also record: `salt`, `schedule` transaction hash, and `execute` transaction hash.
+- Timelocked actions should also record: `salt`, `schedule` transaction hash, and `execute` transaction hash.
 - Each Lark approval record must map cleanly to the final on-chain transaction.
 
 # On-Chain Addresses
@@ -82,7 +83,7 @@ Key points:
 ## Vault Proxy
 
 - Arbitrum One `42161`
-  - Vault Proxy: `0xf105063609cbd63977d9c2bee0142c10fe3d27e8`
+  - Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
 - Arbitrum Sepolia `421614`
   - Vault Proxy: `0xf2137a2d64ba4dafcab54959862f7384ed7be100`
 - Ethereum Sepolia `11155111`
@@ -95,6 +96,7 @@ These must be filled in before the manual is distributed to operators:
 - `Governance Safe`
 - `Governance Timelock`
 - `Admin Safe`
+- `Admin Timelock`
 - `Token Safe`
 - `Validator Safe`
 - `Emergency Guardian Safe`
@@ -120,8 +122,8 @@ These must be filled in before the manual is distributed to operators:
 
 ## ADMIN_ROLE
 
-- Holder: `Admin Safe`
-- Threshold: `4/7`
+- Holder: `Admin Timelock (72h)`
+- Upstream threshold: `Admin Safe 4/7`
 - Hash ID: `0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775`
 - Responsibilities:
   - `updatePendingWithdrawChallengePeriod(uint256)`: updates the pending withdrawal challenge period
@@ -189,16 +191,16 @@ This section assumes operators use the `Multisig Calldata Checker`. Operators sh
 7. Return to the checker in `Decode` mode, paste the `Data`, and confirm the decoded function and parameters exactly match the approved request.
 8. Sign only when the checker `Encode` result, Safe `Review` `Data`, and checker `Decode` result are all consistent.
 
-### Timelocked Action
+### Timelocked Actions
 
-Only `upgradeToAndCall` is timelocked and must be handled as two layers of calldata.
+`ADMIN_ROLE` and `UPGRADE_ROLE` operations are timelocked and must be handled as two layers of calldata.
 
-1. In the checker, select `upgradeToAndCall`, fill `newImplementation` and `data`, and generate the inner calldata.
+1. In the checker, select the target operation, fill the business parameters, and generate the inner calldata.
 2. Confirm the inner calldata `To` is `Vault Proxy`.
 3. Then generate the Timelock outer calldata for:
    - `schedule`
    - `execute`
-4. Confirm the outer calldata `To` is `Governance Timelock`, not `Vault Proxy`.
+4. Confirm the outer calldata `To` is the operation-specific Timelock, not `Vault Proxy`.
 5. For both `schedule` and `execute`, verify:
    - `target` is `Vault Proxy`
    - `data` exactly matches the inner calldata
@@ -214,7 +216,7 @@ Only `upgradeToAndCall` is timelocked and must be handled as two layers of calld
 - The Safe parameters, checker `Encode` result, Safe `Review` `Data`, and checker `Decode` result must all match.
 - For address parameters, also confirm the business meaning of the address: treasury, receiver, validator, or implementation.
 - For arrays and validator sets, verify every item, including order and numeric values.
-- For upgrade actions, keep the inner calldata, `schedule` tx hash, `execute` tx hash, and `salt` in the approval record.
+- For Timelock actions, keep the inner calldata, `schedule` tx hash, `execute` tx hash, and `salt` in the approval record.
 
 ## Supported Actions
 
@@ -254,14 +256,14 @@ Only `upgradeToAndCall` is timelocked and must be handled as two layers of calld
 ### updatePendingWithdrawChallengePeriod
 
 - Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
+- Path: `Admin Safe -> Admin Timelock -> Vault Proxy`
 - Parameters:
   - `newValue`: new challenge period in seconds
 
 ### setRebalanceReceiver
 
 - Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
+- Path: `Admin Safe -> Admin Timelock -> Vault Proxy`
 - Parameters:
   - `newReceiver`: new rebalance receiver
 - Review focus:
@@ -270,7 +272,7 @@ Only `upgradeToAndCall` is timelocked and must be handled as two layers of calld
 ### withdrawFees
 
 - Required Role: `ADMIN_ROLE`
-- Path: `Admin Safe -> Vault Proxy`
+- Path: `Admin Safe -> Admin Timelock -> Vault Proxy`
 - Parameters:
   - `tokens`: token address array, use `address(0)` for native token
   - `to`: fee receiver

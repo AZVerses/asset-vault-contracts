@@ -24,7 +24,8 @@ export type OperationDef = {
   id: string;
   label: string;
   role: string;
-  mode: "direct" | "timelock-upgrade";
+  mode: "direct" | "timelock";
+  timelockType?: "admin" | "governance";
   description: string;
   functionName: string;
   functionSignature: string;
@@ -109,7 +110,8 @@ export const operations: OperationDef[] = [
     id: "upgrade-to-and-call",
     label: "upgradeToAndCall",
     role: "UPGRADE_ROLE",
-    mode: "timelock-upgrade",
+    mode: "timelock",
+    timelockType: "governance",
     description: "Upgrade the Vault Proxy implementation through Governance Timelock.",
     functionName: "upgradeToAndCall",
     functionSignature: "upgradeToAndCall(address,bytes)",
@@ -137,8 +139,9 @@ export const operations: OperationDef[] = [
     id: "update-challenge-period",
     label: "updatePendingWithdrawChallengePeriod",
     role: "ADMIN_ROLE",
-    mode: "direct",
-    description: "Update the pending withdrawal challenge period.",
+    mode: "timelock",
+    timelockType: "admin",
+    description: "Update the pending withdrawal challenge period through Admin Timelock.",
     functionName: "updatePendingWithdrawChallengePeriod",
     functionSignature: "updatePendingWithdrawChallengePeriod(uint256)",
     abiJson: abi(
@@ -158,8 +161,9 @@ export const operations: OperationDef[] = [
     id: "set-rebalance-receiver",
     label: "setRebalanceReceiver",
     role: "ADMIN_ROLE",
-    mode: "direct",
-    description: "Set the fixed rebalance receiver.",
+    mode: "timelock",
+    timelockType: "admin",
+    description: "Set the fixed rebalance receiver through Admin Timelock.",
     functionName: "setRebalanceReceiver",
     functionSignature: "setRebalanceReceiver(address)",
     abiJson: abi(
@@ -174,8 +178,9 @@ export const operations: OperationDef[] = [
     id: "withdraw-fees",
     label: "withdrawFees",
     role: "ADMIN_ROLE",
-    mode: "direct",
-    description: "Withdraw accumulated protocol fees.",
+    mode: "timelock",
+    timelockType: "admin",
+    description: "Withdraw accumulated protocol fees through Admin Timelock.",
     functionName: "withdrawFees",
     functionSignature: "withdrawFees(address[],address)",
     abiJson: abi(
