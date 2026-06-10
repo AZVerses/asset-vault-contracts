@@ -3,6 +3,7 @@ pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
 import {stdJson} from "forge-std/StdJson.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {AssetVault} from "../src/AssetVault.sol";
 
@@ -26,6 +27,9 @@ contract SetRoles is Script {
 
     string internal constant HOLDER_TYPE_DIRECT_SAFE = "DIRECT_SAFE";
     string internal constant HOLDER_TYPE_TIMELOCK = "TIMELOCK";
+
+    string[] internal _deployedRoleKeys;
+    address[] internal _deployedTimelocks;
 
     struct ChainConfig {
         string key;
@@ -58,6 +62,9 @@ contract SetRoles is Script {
     }
 
     function _run(bool forceSet) internal {
+        delete _deployedRoleKeys;
+        delete _deployedTimelocks;
+
         uint256 privateKey = vm.envUint("AZ_DEPLOYER_PRIVATE_KEY");
         address broadcaster = vm.addr(privateKey);
 
@@ -84,24 +91,44 @@ contract SetRoles is Script {
         vm.startBroadcast(privateKey);
 
         for (uint256 i = 0; i < chainConfig.roleOrder.length; ++i) {
-            RoleConfig memory roleConfig = _loadRoleConfig(chainConfig.key, chainConfig.roleOrder[i]);
-            bytes32 role = _roleHash(roleConfig.name);
-
-            if (_isHolderType(roleConfig.holderType, HOLDER_TYPE_DIRECT_SAFE)) {
-                _applyDirectRole(vault, roleConfig, role, broadcaster, forceSet);
-                continue;
+            (address timelockAddress, bool deployedNew) = _applyConfiguredRole(
+                vault,
+                chainConfig.key,
+                chainConfig.roleOrder[i],
+                broadcaster,
+                forceSet
+            );
+            if (deployedNew) {
+                _deployedRoleKeys.push(chainConfig.roleOrder[i]);
+                _deployedTimelocks.push(timelockAddress);
             }
-
-            if (_isHolderType(roleConfig.holderType, HOLDER_TYPE_TIMELOCK)) {
-                _applyTimelockRole(vault, roleConfig, role, broadcaster, forceSet);
-                continue;
-            }
-
-            revert InvalidHolderType(roleConfig.key, roleConfig.holderType);
         }
 
         vm.stopBroadcast();
+        _writeDeployedTimelocks(chainConfig.key);
         console.log("SetRoles completed.");
+    }
+
+    function _applyConfiguredRole(
+        AssetVault vault,
+        string memory chainKey,
+        string memory roleKey,
+        address broadcaster,
+        bool forceSet
+    ) internal returns (address timelockAddress, bool deployedNew) {
+        RoleConfig memory roleConfig = _loadRoleConfig(chainKey, roleKey);
+        bytes32 role = _roleHash(roleConfig.name);
+
+        if (_isHolderType(roleConfig.holderType, HOLDER_TYPE_DIRECT_SAFE)) {
+            _applyDirectRole(vault, roleConfig, role, broadcaster, forceSet);
+            return (address(0), false);
+        }
+
+        if (_isHolderType(roleConfig.holderType, HOLDER_TYPE_TIMELOCK)) {
+            return _applyTimelockRole(vault, roleConfig, role, broadcaster, forceSet);
+        }
+
+        revert InvalidHolderType(roleConfig.key, roleConfig.holderType);
     }
 
     function _preflight(
@@ -327,11 +354,12 @@ contract SetRoles is Script {
         bytes32 role,
         address broadcaster,
         bool forceSet
-    ) internal {
+    ) internal returns (address timelockAddress, bool deployedNew) {
         bytes32 vaultAdminRole = vault.getRoleAdmin(role);
         bool broadcasterCanManageVaultRole = vault.hasRole(vaultAdminRole, broadcaster);
-        address timelockAddress = roleConfig.timelock;
+        timelockAddress = roleConfig.timelock;
         bool isNewDeployment = timelockAddress == address(0);
+        deployedNew = isNewDeployment;
 
         TimelockController timelock;
         if (isNewDeployment) {
@@ -394,6 +422,41 @@ contract SetRoles is Script {
             console.log("Renouncing bootstrap timelock admin from broadcaster");
             timelock.renounceRole(timelock.DEFAULT_ADMIN_ROLE(), broadcaster);
         }
+    }
+
+    function _writeDeployedTimelocks(string memory chainKey) internal {
+        if (_deployedRoleKeys.length == 0) {
+            return;
+        }
+
+        if (!_isRealBroadcastContext()) {
+            console.log("Skipping config writeback outside real broadcast context.");
+            for (uint256 i = 0; i < _deployedRoleKeys.length; ++i) {
+                console.log("Dry-run timelock for role:", _deployedRoleKeys[i]);
+                console.log("Dry-run timelock address:", _deployedTimelocks[i]);
+            }
+            return;
+        }
+
+        string memory path = _configPath();
+        for (uint256 i = 0; i < _deployedRoleKeys.length; ++i) {
+            string memory valueKey = string.concat(
+                ".chains.",
+                chainKey,
+                ".roles.",
+                _deployedRoleKeys[i],
+                ".timelock"
+            );
+            string memory jsonAddress = string.concat("\"", vm.toString(_deployedTimelocks[i]), "\"");
+            vm.writeJson(jsonAddress, path, valueKey);
+            console.log("Config updated for role:", _deployedRoleKeys[i]);
+            console.log("Config timelock address:", _deployedTimelocks[i]);
+        }
+    }
+
+    function _isRealBroadcastContext() internal view returns (bool) {
+        return vm.isContext(VmSafe.ForgeContext.ScriptBroadcast)
+            || vm.isContext(VmSafe.ForgeContext.ScriptResume);
     }
 
     function _ensureTimelockSubRole(
@@ -471,15 +534,19 @@ contract SetRoles is Script {
     }
 
     function _readConfigJson() internal view returns (string memory) {
-        string memory path = vm.envOr(
-            "SET_ROLES_CONFIG_PATH",
-            string.concat(vm.projectRoot(), "/ops/config/set-roles.json")
-        );
+        string memory path = _configPath();
 
         if (!vm.exists(path)) {
             revert MissingConfigFile(path);
         }
 
         return vm.readFile(path);
+    }
+
+    function _configPath() internal view returns (string memory) {
+        return vm.envOr(
+            "SET_ROLES_CONFIG_PATH",
+            string.concat(vm.projectRoot(), "/ops/config/set-roles.json")
+        );
     }
 }

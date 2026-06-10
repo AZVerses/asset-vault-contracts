@@ -171,52 +171,269 @@ These must be filled in before the manual is distributed to operators:
 
 # Operations
 
-This section assumes operators use the `Multisig Calldata Checker`. Operators should not need `cast` or any other CLI tooling.
+This section only explains how to fill and verify transactions in the Safe web UI. Operators should use the `Multisig Calldata Checker` and should not need `cast` or any other CLI tooling.
 
 - Tool URL: `https://web-three-mauve-40.vercel.app`
 
-## How To Use The Multisig Calldata Checker
+## Arbitrum One Target Addresses
 
-### Direct Actions
+- Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Admin Timelock: `chains.arb1.roles.admin.timelock` in `ops/config/set-roles.json`
+- Governance Timelock: `chains.arb1.roles.upgrade.timelock` in `ops/config/set-roles.json`
+- Current Timelock delay: `259200` seconds
 
-1. Select the chain.
-2. Select the target operation.
-3. In `Encode` mode, fill in the parameters.
-4. The tool will show:
-   - the correct `To`
-   - the correct `ABI JSON`
-   - the generated calldata
-5. In Safe `Transaction Builder`, fill the same `To`, `ABI JSON`, and parameters.
-6. On the Safe `Review` page, copy the generated `Data`.
-7. Return to the checker in `Decode` mode, paste the `Data`, and confirm the decoded function and parameters exactly match the approved request.
-8. Sign only when the checker `Encode` result, Safe `Review` `Data`, and checker `Decode` result are all consistent.
+Important: Timelock addresses must come from the final values in `ops/config/set-roles.json`. If a Timelock field is still `0x0000000000000000000000000000000000000000`, that Timelock has not been deployed or written back yet, and the corresponding operation must not be submitted.
 
-### Timelocked Actions
+## How To Fill Direct Actions In Safe
 
-`ADMIN_ROLE` and `UPGRADE_ROLE` operations are timelocked and must be handled as two layers of calldata.
+Applicable operations: `grantRole`, `revokeRole`, `addToken`, `updateToken`, `addValidators`, `updateValidatorRequiredPower`, `removeValidators`, `toggle`.
 
-1. In the checker, select the target operation, fill the business parameters, and generate the inner calldata.
-2. Confirm the inner calldata `To` is `Vault Proxy`.
-3. Then generate the Timelock outer calldata for:
-   - `schedule`
-   - `execute`
-4. Confirm the outer calldata `To` is the operation-specific Timelock, not `Vault Proxy`.
-5. For both `schedule` and `execute`, verify:
-   - `target` is `Vault Proxy`
-   - `data` exactly matches the inner calldata
-   - `predecessor` is correct
-   - `salt` matches the approval record
-   - `delay` is the expected value
-6. On the Safe `Review` page, copy the outer `Data` and decode it again in the checker.
-7. `execute` must use the exact same `target / data / predecessor / salt` as `schedule`. The only extra field in `schedule` is `delay`.
+1. Open the `Multisig Calldata Checker`, select the target chain and operation.
+2. Select `Encode` and fill parameters from the approved request.
+3. Copy the `ABI JSON` shown by the checker.
+4. Open Safe `Transaction Builder`.
+5. Set `To` to the Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`.
+6. Paste the operation `ABI JSON` and select the matching function.
+7. Fill the exact same parameters in Safe.
+8. On the Safe `Review` page, copy the generated `Data`.
+9. Return to the checker, switch to `Decode`, paste the Safe `Data`, and verify function name, target, and parameters.
+10. Sign only when checker `Encode`, Safe parameters, Safe `Data`, and checker `Decode` all match.
 
-## General Review Rules
+## How To Fill Timelocked Actions In Safe
 
-- Do not hand-write raw calldata. Use the checker output as the source of truth.
-- The Safe parameters, checker `Encode` result, Safe `Review` `Data`, and checker `Decode` result must all match.
-- For address parameters, also confirm the business meaning of the address: treasury, receiver, validator, or implementation.
-- For arrays and validator sets, verify every item, including order and numeric values.
-- For Timelock actions, keep the inner calldata, `schedule` tx hash, `execute` tx hash, and `salt` in the approval record.
+Applicable operations: `updatePendingWithdrawChallengePeriod`, `setRebalanceReceiver`, `withdrawFees`, `upgradeToAndCall`.
+
+Timelocked actions have two calldata layers:
+
+- Inner calldata: the business function executed on the Vault Proxy.
+- Outer calldata: the TimelockController `schedule` or `execute` call.
+
+### Generate Inner Calldata
+
+1. Open the checker, select the target chain and business operation.
+2. Select `Encode` and fill business parameters from the approved request.
+3. Confirm the inner target is the Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`.
+4. Copy the generated inner calldata.
+5. Use checker `Decode` on the inner calldata and confirm the business function and parameters.
+
+### Submit Schedule
+
+1. Continue in the checker and generate Timelock `schedule` calldata.
+2. Set Safe `To` based on the operation type:
+   - `ADMIN_ROLE` operations use Admin Timelock.
+   - `UPGRADE_ROLE` operations use Governance Timelock.
+3. Paste the `schedule` ABI JSON in Safe.
+4. Select `schedule(address,uint256,bytes,bytes32,bytes32,uint256)`.
+5. Fill Safe parameters:
+   - `target`: Vault Proxy
+   - `value`: `0`
+   - `data`: inner calldata
+   - `predecessor`: `0x0000000000000000000000000000000000000000000000000000000000000000` if there is no dependency
+   - `salt`: the `bytes32` salt recorded in the Lark approval
+   - `delay`: `259200`
+6. On the Safe `Review` page, copy `Data` and decode the outer calldata in the checker.
+7. Verify outer `target` is Vault Proxy, outer `data` exactly equals inner calldata, and `salt` / `delay` match the approval record.
+
+### Submit Execute
+
+1. After the Timelock delay has passed, generate Timelock `execute` calldata in the checker.
+2. Safe `To` is still the corresponding Timelock, not the Vault Proxy.
+3. Paste the `execute` ABI JSON in Safe.
+4. Select `execute(address,uint256,bytes,bytes32,bytes32)`.
+5. Fill Safe parameters:
+   - `target`: exactly the same as `schedule.target`
+   - `value`: exactly the same as `schedule.value`
+   - `data`: exactly the same as `schedule.data`
+   - `predecessor`: exactly the same as `schedule.predecessor`
+   - `salt`: exactly the same as `schedule.salt`
+6. On the Safe `Review` page, copy `Data` and decode both outer and inner calldata in the checker.
+7. Sign only when the outer parameters match the scheduled operation and the inner business parameters are still correct.
+
+## Operation List And ABI JSON
+
+### `grantRole(bytes32,address)`
+
+- Role: `DEFAULT_ADMIN_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Parameters:
+  - `role`: select from the checker dropdown; do not type the role hash manually.
+  - `account`: address receiving the role.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"bytes32","name":"role","type":"bytes32"},{"internalType":"address","name":"account","type":"address"}],"name":"grantRole","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `revokeRole(bytes32,address)`
+
+- Role: `DEFAULT_ADMIN_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Parameters:
+  - `role`: select from the checker dropdown; do not type the role hash manually.
+  - `account`: address losing the role.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"bytes32","name":"role","type":"bytes32"},{"internalType":"address","name":"account","type":"address"}],"name":"revokeRole","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `upgradeToAndCall(address,bytes)`
+
+- Role: `UPGRADE_ROLE`
+- Path: Governance Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Governance Timelock
+- Parameters:
+  - `newImplementation`: new implementation address.
+  - `data`: migration or initialization calldata; use `0x` if none is required.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address","name":"newImplementation","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"upgradeToAndCall","outputs":[],"stateMutability":"payable","type":"function"}]
+```
+
+### `updatePendingWithdrawChallengePeriod(uint256)`
+
+- Role: `ADMIN_ROLE`
+- Path: Admin Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Admin Timelock
+- Parameters:
+  - `newValue`: new challenge period in seconds.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"uint256","name":"newValue","type":"uint256"}],"name":"updatePendingWithdrawChallengePeriod","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `setRebalanceReceiver(address)`
+
+- Role: `ADMIN_ROLE`
+- Path: Admin Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Admin Timelock
+- Parameters:
+  - `newReceiver`: fixed receiver used by `rebalanceWithdraw`.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address","name":"newReceiver","type":"address"}],"name":"setRebalanceReceiver","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `withdrawFees(address[],address)`
+
+- Role: `ADMIN_ROLE`
+- Path: Admin Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Admin Timelock
+- Parameters:
+  - `tokens`: token addresses to withdraw fees for; use `0x0000000000000000000000000000000000000000` for native token.
+  - `to`: fee receiver.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address[]","name":"tokens","type":"address[]"},{"internalType":"address","name":"to","type":"address"}],"name":"withdrawFees","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `addToken(address,uint256,uint256)`
+
+- Role: `TOKEN_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Parameters:
+  - `token`: token address.
+  - `hardCapRatioBps`: hard cap ratio in bps.
+  - `refillRateMps`: refill rate in mps.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"uint256","name":"hardCapRatioBps","type":"uint256"},{"internalType":"uint256","name":"refillRateMps","type":"uint256"}],"name":"addToken","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `updateToken(address,uint256,uint256)`
+
+- Role: `TOKEN_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Parameters:
+  - `token`: token address.
+  - `hardCapRatioBps`: new hard cap ratio in bps.
+  - `refillRateMps`: new refill rate in mps.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"uint256","name":"hardCapRatioBps","type":"uint256"},{"internalType":"uint256","name":"refillRateMps","type":"uint256"}],"name":"updateToken","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `addValidators((address,uint256)[],uint256)`
+
+- Role: `VALIDATOR_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Parameters:
+  - `validators`: validator list; each item has `signer` and `power`.
+  - `requiredPower`: minimum power required for this validator set.
+- ABI JSON:
+
+```json
+[{"inputs":[{"components":[{"internalType":"address","name":"signer","type":"address"},{"internalType":"uint256","name":"power","type":"uint256"}],"internalType":"struct ValidatorInfo[]","name":"validators","type":"tuple[]"},{"internalType":"uint256","name":"requiredPower","type":"uint256"}],"name":"addValidators","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `updateValidatorRequiredPower((address,uint256)[],uint256)`
+
+- Role: `VALIDATOR_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Parameters:
+  - `validators`: existing validator set; must match the on-chain set.
+  - `newRequiredPower`: new minimum required power.
+- ABI JSON:
+
+```json
+[{"inputs":[{"components":[{"internalType":"address","name":"signer","type":"address"},{"internalType":"uint256","name":"power","type":"uint256"}],"internalType":"struct ValidatorInfo[]","name":"validators","type":"tuple[]"},{"internalType":"uint256","name":"newRequiredPower","type":"uint256"}],"name":"updateValidatorRequiredPower","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `removeValidators((address,uint256)[])`
+
+- Role: `VALIDATOR_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Parameters:
+  - `validators`: validator set to remove.
+- ABI JSON:
+
+```json
+[{"inputs":[{"components":[{"internalType":"address","name":"signer","type":"address"},{"internalType":"uint256","name":"power","type":"uint256"}],"internalType":"struct ValidatorInfo[]","name":"validators","type":"tuple[]"}],"name":"removeValidators","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `toggle(bool)`
+
+- Role: `PAUSE_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Parameters:
+  - `pause`: `true` pauses the vault, `false` unpauses it.
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"bool","name":"pause","type":"bool"}],"name":"toggle","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+## TimelockController ABI JSON
+
+### `schedule(address,uint256,bytes,bytes32,bytes32,uint256)`
+
+```json
+[{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `execute(address,uint256,bytes,bytes32,bytes32)`
+
+```json
+[{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"execute","outputs":[],"stateMutability":"payable","type":"function"}]
+```
 
 ## Supported Actions
 

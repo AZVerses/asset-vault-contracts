@@ -171,52 +171,269 @@
 
 # Operations
 
-本章默认使用 `Multisig Calldata Checker` 作为操作和复核工具，不再要求操作者使用 `cast` 或其他命令行工具。
+本章只说明 Safe 网页端如何填写和复核交易。默认使用 `Multisig Calldata Checker` 生成和校验 calldata，不要求操作者安装命令行工具。
 
 - Tool URL: `https://web-three-mauve-40.vercel.app`
 
-## 如何使用 Multisig Calldata Checker
+## Arbitrum One Target 地址
 
-### Direct 型操作
+- Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Admin Timelock: `ops/config/set-roles.json` 的 `chains.arb1.roles.admin.timelock`
+- Governance Timelock: `ops/config/set-roles.json` 的 `chains.arb1.roles.upgrade.timelock`
+- 当前 Timelock delay: `259200` 秒
 
-1. 选择链。
-2. 选择要执行的操作。
-3. 在 `Encode` 模式下填写参数。
-4. 工具会显示：
-   - 当前应填写的 `To`
-   - 当前应使用的 `ABI JSON`
-   - 生成出的 calldata
-5. 在 Safe `Transaction Builder` 中填入相同的 `To`、`ABI JSON` 和参数。
-6. 到 `Review` 页面后，复制 Safe 生成的 `Data`。
-7. 回到 checker 的 `Decode` 模式，粘贴这段 `Data`，确认解码出的函数和参数与审批单完全一致。
-8. 只有在 `Encode` 结果、Safe `Review` 里的 `Data`、以及 `Decode` 结果三者一致时，才进入签名。
+注意：Timelock 地址必须以 `ops/config/set-roles.json` 中的最终值为准。如果该字段仍为 `0x0000000000000000000000000000000000000000`，说明该 Timelock 尚未完成部署或配置写回，不能发起对应操作。
 
-### Timelock 型操作
+## Direct 操作如何填写 Safe
 
-`ADMIN_ROLE` 和 `UPGRADE_ROLE` 操作都经过 Timelock，必须按两层 calldata 处理。
+适用操作：`grantRole`、`revokeRole`、`addToken`、`updateToken`、`addValidators`、`updateValidatorRequiredPower`、`removeValidators`、`toggle`。
 
-1. 先在 checker 中选择目标操作并填写业务参数，生成 inner calldata。
-2. 确认 inner calldata 的 `To` 是 `Vault Proxy`。
-3. 再继续生成 Timelock 的 outer calldata：
-   - `schedule`
-   - `execute`
-4. 确认 outer calldata 的 `To` 是该操作对应的 Timelock，不能填成 `Vault Proxy`。
-5. 对 `schedule` 和 `execute`，必须重点核对：
-   - `target` 是否为 `Vault Proxy`
-   - `data` 是否与 inner calldata 完全一致
-   - `predecessor` 是否正确
-   - `salt` 是否与审批记录一致
-   - `delay` 是否为预期值
-6. 在 Safe `Review` 页面复制 outer `Data`，回到 checker `Decode` 模式逐项解码确认。
-7. `execute` 时使用的 `target / data / predecessor / salt` 必须与 `schedule` 完全一致，只是 `schedule` 多一个 `delay`。
+1. 打开 `Multisig Calldata Checker`，选择目标链和操作。
+2. 选择 `Encode`，按审批单填写参数。
+3. 复制工具展示的 `ABI JSON`。
+4. 打开 Safe `Transaction Builder`。
+5. `To` 填 `Vault Proxy`：`0xAB3D96237328385f8988166c6d7788a63f48dDa6`。
+6. 粘贴对应操作的 `ABI JSON`，选择同名函数。
+7. 在 Safe 中填写和 checker 完全相同的参数。
+8. 进入 Safe `Review` 页面，复制 Safe 展示的 `Data`。
+9. 回到 checker，切换 `Decode`，粘贴 Safe `Data`，确认函数名、target、参数全部一致。
+10. 只有 checker `Encode`、Safe 参数、Safe `Data`、checker `Decode` 四者一致，才进入签名。
 
-## 通用复核原则
+## Timelock 操作如何填写 Safe
 
-- 不要手填 raw calldata，应以 checker 生成结果为准。
-- Safe 中实际填写的参数、checker `Encode` 结果、Safe `Review` 的 `Data`、checker `Decode` 结果，四者必须一致。
-- 对于地址类参数，除了解码正确，还要核对地址用途是否和审批一致，例如 treasury、receiver、validator、implementation。
-- 对于数组和 validator 集合，必须逐项核对顺序和数值，不能只看首尾几项。
-- 对于 Timelock 操作，必须同时保存 inner calldata、`schedule` 交易哈希、`execute` 交易哈希和 `salt`。
+适用操作：`updatePendingWithdrawChallengePeriod`、`setRebalanceReceiver`、`withdrawFees`、`upgradeToAndCall`。
+
+Timelock 操作有两层 calldata：
+
+- Inner calldata: Vault Proxy 上真正要执行的业务函数。
+- Outer calldata: TimelockController 的 `schedule` 或 `execute`。
+
+### 生成 inner calldata
+
+1. 打开 checker，选择目标链和业务操作。
+2. 选择 `Encode`，按审批单填写业务参数。
+3. 确认 checker 展示的 inner target 是 `Vault Proxy`：`0xAB3D96237328385f8988166c6d7788a63f48dDa6`。
+4. 复制生成出的 inner calldata。
+5. 用 checker 的 `Decode` 模式粘贴 inner calldata，确认业务函数和参数正确。
+
+### 发起 schedule
+
+1. 在 checker 中继续生成 Timelock `schedule` calldata。
+2. Timelock target 按操作类型填写：
+   - `ADMIN_ROLE` 操作的 Safe `To` 填 Admin Timelock。
+   - `UPGRADE_ROLE` 操作的 Safe `To` 填 Governance Timelock。
+3. Safe `ABI JSON` 粘贴 `schedule` ABI。
+4. Safe 函数选择 `schedule(address,uint256,bytes,bytes32,bytes32,uint256)`。
+5. Safe 参数填写：
+   - `target`: `Vault Proxy`
+   - `value`: `0`
+   - `data`: inner calldata
+   - `predecessor`: 无前置依赖时填 `0x0000000000000000000000000000000000000000000000000000000000000000`
+   - `salt`: Lark 审批记录里的 `bytes32` salt
+   - `delay`: `259200`
+6. Safe `Review` 页面复制 `Data`，用 checker `Decode` 解出 outer calldata。
+7. 核对 outer `target` 是 Vault Proxy，outer `data` 完全等于 inner calldata，`salt` 和 `delay` 与审批记录一致。
+
+### 发起 execute
+
+1. 等 Timelock delay 到期后，在 checker 中生成 Timelock `execute` calldata。
+2. Safe `To` 仍然填对应 Timelock，不要填 Vault Proxy。
+3. Safe `ABI JSON` 粘贴 `execute` ABI。
+4. Safe 函数选择 `execute(address,uint256,bytes,bytes32,bytes32)`。
+5. Safe 参数填写：
+   - `target`: 与 `schedule.target` 完全一致
+   - `value`: 与 `schedule.value` 完全一致
+   - `data`: 与 `schedule.data` 完全一致
+   - `predecessor`: 与 `schedule.predecessor` 完全一致
+   - `salt`: 与 `schedule.salt` 完全一致
+6. Safe `Review` 页面复制 `Data`，用 checker `Decode` 解出 outer 和 inner calldata。
+7. 只有 outer 参数与 schedule 完全一致，且 inner 业务参数仍然正确，才进入签名。
+
+## 操作清单和 ABI JSON
+
+### `grantRole(bytes32,address)`
+
+- Role: `DEFAULT_ADMIN_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- 参数：
+  - `role`: 使用 checker 下拉选择，不要手输 role hash。
+  - `account`: 被授予角色的地址。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"bytes32","name":"role","type":"bytes32"},{"internalType":"address","name":"account","type":"address"}],"name":"grantRole","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `revokeRole(bytes32,address)`
+
+- Role: `DEFAULT_ADMIN_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- 参数：
+  - `role`: 使用 checker 下拉选择，不要手输 role hash。
+  - `account`: 被回收角色的地址。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"bytes32","name":"role","type":"bytes32"},{"internalType":"address","name":"account","type":"address"}],"name":"revokeRole","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `upgradeToAndCall(address,bytes)`
+
+- Role: `UPGRADE_ROLE`
+- Path: Governance Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Governance Timelock
+- 参数：
+  - `newImplementation`: 新 implementation 地址。
+  - `data`: 升级后需要执行的迁移或初始化 calldata；没有则填 `0x`。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address","name":"newImplementation","type":"address"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"upgradeToAndCall","outputs":[],"stateMutability":"payable","type":"function"}]
+```
+
+### `updatePendingWithdrawChallengePeriod(uint256)`
+
+- Role: `ADMIN_ROLE`
+- Path: Admin Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Admin Timelock
+- 参数：
+  - `newValue`: 新挑战期秒数。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"uint256","name":"newValue","type":"uint256"}],"name":"updatePendingWithdrawChallengePeriod","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `setRebalanceReceiver(address)`
+
+- Role: `ADMIN_ROLE`
+- Path: Admin Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Admin Timelock
+- 参数：
+  - `newReceiver`: `rebalanceWithdraw` 固定收款地址。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address","name":"newReceiver","type":"address"}],"name":"setRebalanceReceiver","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `withdrawFees(address[],address)`
+
+- Role: `ADMIN_ROLE`
+- Path: Admin Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Admin Timelock
+- 参数：
+  - `tokens`: 要提取手续费的 token 地址列表；原生币使用 `0x0000000000000000000000000000000000000000`。
+  - `to`: 手续费收款地址。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address[]","name":"tokens","type":"address[]"},{"internalType":"address","name":"to","type":"address"}],"name":"withdrawFees","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `addToken(address,uint256,uint256)`
+
+- Role: `TOKEN_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- 参数：
+  - `token`: token 地址。
+  - `hardCapRatioBps`: 快提硬上限比例，单位 bps。
+  - `refillRateMps`: 快提额度回补速度，单位 mps。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"uint256","name":"hardCapRatioBps","type":"uint256"},{"internalType":"uint256","name":"refillRateMps","type":"uint256"}],"name":"addToken","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `updateToken(address,uint256,uint256)`
+
+- Role: `TOKEN_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- 参数：
+  - `token`: token 地址。
+  - `hardCapRatioBps`: 新快提硬上限比例，单位 bps。
+  - `refillRateMps`: 新快提额度回补速度，单位 mps。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"address","name":"token","type":"address"},{"internalType":"uint256","name":"hardCapRatioBps","type":"uint256"},{"internalType":"uint256","name":"refillRateMps","type":"uint256"}],"name":"updateToken","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `addValidators((address,uint256)[],uint256)`
+
+- Role: `VALIDATOR_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- 参数：
+  - `validators`: validator 列表，每项包含 `signer` 和 `power`。
+  - `requiredPower`: 该 validator 集合通过校验所需最小 power。
+- ABI JSON:
+
+```json
+[{"inputs":[{"components":[{"internalType":"address","name":"signer","type":"address"},{"internalType":"uint256","name":"power","type":"uint256"}],"internalType":"struct ValidatorInfo[]","name":"validators","type":"tuple[]"},{"internalType":"uint256","name":"requiredPower","type":"uint256"}],"name":"addValidators","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `updateValidatorRequiredPower((address,uint256)[],uint256)`
+
+- Role: `VALIDATOR_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- 参数：
+  - `validators`: 已存在的 validator 集合，必须与链上集合一致。
+  - `newRequiredPower`: 新的最小 required power。
+- ABI JSON:
+
+```json
+[{"inputs":[{"components":[{"internalType":"address","name":"signer","type":"address"},{"internalType":"uint256","name":"power","type":"uint256"}],"internalType":"struct ValidatorInfo[]","name":"validators","type":"tuple[]"},{"internalType":"uint256","name":"newRequiredPower","type":"uint256"}],"name":"updateValidatorRequiredPower","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `removeValidators((address,uint256)[])`
+
+- Role: `VALIDATOR_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- 参数：
+  - `validators`: 要删除的 validator 集合。
+- ABI JSON:
+
+```json
+[{"inputs":[{"components":[{"internalType":"address","name":"signer","type":"address"},{"internalType":"uint256","name":"power","type":"uint256"}],"internalType":"struct ValidatorInfo[]","name":"validators","type":"tuple[]"}],"name":"removeValidators","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `toggle(bool)`
+
+- Role: `PAUSE_ROLE`
+- Path: Direct
+- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- 参数：
+  - `pause`: `true` 表示暂停，`false` 表示恢复。
+- ABI JSON:
+
+```json
+[{"inputs":[{"internalType":"bool","name":"pause","type":"bool"}],"name":"toggle","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+## TimelockController ABI JSON
+
+### `schedule(address,uint256,bytes,bytes32,bytes32,uint256)`
+
+```json
+[{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"},{"internalType":"uint256","name":"delay","type":"uint256"}],"name":"schedule","outputs":[],"stateMutability":"nonpayable","type":"function"}]
+```
+
+### `execute(address,uint256,bytes,bytes32,bytes32)`
+
+```json
+[{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"execute","outputs":[],"stateMutability":"payable","type":"function"}]
+```
 
 ## 支持的操作
 
