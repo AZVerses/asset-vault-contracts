@@ -198,7 +198,6 @@ contract AssetVault is
         address receiver,
         address token,
         uint256 amount,
-        uint256 fee,
         uint256 nonce
     );
 
@@ -337,7 +336,7 @@ contract AssetVault is
         uint256 refillRateMps
     ) external onlyRole(TOKEN_ROLE) {
         TokenInfo storage tokenInfo = supportedTokens[token];
-        if (tokenInfo.hardCapRatioBps != 0) {
+        if (_isTokenSupported(token)) {
             revert TokenAlreadyExists();
         }
         _validateTokenConfig(hardCapRatioBps, refillRateMps);
@@ -477,7 +476,6 @@ contract AssetVault is
     function rebalanceWithdraw(
         address token,
         uint256 amount,
-        uint256 fee,
         ValidatorInfo[] calldata validators,
         bytes[] calldata validatorSignatures,
         uint256 nonce
@@ -498,15 +496,14 @@ contract AssetVault is
                 address(this),
                 token,
                 amount,
-                fee,
                 receiver,
                 nonce
             )
         );
 
         _verifyValidatorSignature(validators, digest, validatorSignatures);
-        _transfer(payable(receiver), token, amount, fee);
-        emit RebalanceWithdrawExecuted(receiver, token, amount, fee, nonce);
+        _transfer(payable(receiver), token, amount, 0);
+        emit RebalanceWithdrawExecuted(receiver, token, amount, nonce);
     }
 
     function batchTogglePendingWithdrawal(
@@ -800,10 +797,13 @@ contract AssetVault is
     }
 
     function _ensureTokenValid(address token) internal view {
-        TokenInfo storage tokenInfo = supportedTokens[token];
-        if (tokenInfo.hardCapRatioBps == 0) {
+        if (!_isTokenSupported(token)) {
             revert TokenInvalid();
         }
+    }
+
+    function _isTokenSupported(address token) internal view returns (bool) {
+        return supportedTokens[token].hardCapRatioBps != 0;
     }
 
     function _nonceUsedCheckAndSet(uint256 nonce) internal {

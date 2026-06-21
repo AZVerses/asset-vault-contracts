@@ -260,6 +260,7 @@ Conditions:
 Behavior:
 
 - transfers assets to the configured `rebalanceReceiver`
+- the interface has no `fee` parameter and rebalance does not accrue protocol fees
 - does not enter the slow queue
 - does not consume hot-withdraw capacity
 
@@ -277,6 +278,9 @@ Conditions:
 Behavior:
 
 - resets `usedWithdrawHotAmount` to zero for each token
+- reuses the `WithdrawHotAmountRefilled` event for observability
+- on this reset path, the event's `refillAmount` field means the pre-reset `usedWithdrawHotAmount`, not a time-based refill amount
+- off-chain monitoring and analytics must distinguish reset-triggered events from natural refill-triggered events by transaction function context
 
 ### `withdrawFees`
 

@@ -40,6 +40,7 @@ Key points:
 - Verify Safe domain, chain ID, Safe address, Vault Proxy address, Timelock address, and receiver address before signing.
 - Validator signatures for withdrawal-related operator actions use `personal_sign` / EIP-191 style signing, not EIP-712 typed data.
 - Withdrawal-related nonces are one-time unique `uint256` values. They must be unused, but they do not need to be sequential or strictly increasing.
+- `batchResetWithdrawHotAmount` reuses the `WithdrawHotAmountRefilled` event. On that path, the event's `refillAmount` field means the pre-reset used amount, not a natural refill amount.
 - Production signing must be performed on dedicated devices with hardware wallets.
 - New addresses, tokens, validators, and implementations must be cross-checked from trusted sources.
 - Every executed action must be verified on-chain. A successful transaction status alone is not sufficient.

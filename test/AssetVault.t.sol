@@ -149,6 +149,17 @@ contract AssetVaultTest is Test {
         vault.addToken(address(token1), 5000, 1000);
     }
 
+    function test_AddToken_NativeToken_AlreadyExists_Reverts() public {
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , ) =
+            vault.supportedTokens(address(0));
+        assertEq(hardCapRatioBps, 5000);
+        assertEq(refillRateMps, 1000);
+
+        vm.expectRevert(AssetVault.TokenAlreadyExists.selector);
+        vm.prank(tokenRole);
+        vault.addToken(address(0), 6000, 2000);
+    }
+
     function test_UpdateToken_OnlyTokenRole() public {
         vm.expectRevert();
         vm.prank(user);
@@ -159,6 +170,18 @@ contract AssetVaultTest is Test {
         vm.prank(tokenRole);
         vault.updateToken(address(token1), 6000, 2000);
         (, uint256 hardCapRatioBps, uint256 refillRateMps, , ) = vault.supportedTokens(address(token1));
+        assertEq(hardCapRatioBps, 6000);
+        assertEq(refillRateMps, 2000);
+    }
+
+    function test_UpdateToken_NativeToken_Succeeds() public {
+        vm.expectEmit(true, false, false, true);
+        emit AssetVault.TokenUpdated(address(0), 6000, 2000);
+        vm.prank(tokenRole);
+        vault.updateToken(address(0), 6000, 2000);
+
+        (, uint256 hardCapRatioBps, uint256 refillRateMps, , ) =
+            vault.supportedTokens(address(0));
         assertEq(hardCapRatioBps, 6000);
         assertEq(refillRateMps, 2000);
     }
@@ -233,6 +256,18 @@ contract AssetVaultTest is Test {
         (bool success, ) = payable(address(vault)).call{value: 10e18}("");
         require(success, "ETH transfer failed");
         assertEq(address(vault).balance, 10e18);
+    }
+
+    function test_Deposit_ETH_NativeTokenNotSupported_Reverts() public {
+        AssetVault freshVault = new AssetVault();
+
+        vm.deal(user, 1 ether);
+        vm.prank(user);
+        (bool success, bytes memory revertData) =
+            payable(address(freshVault)).call{value: 1 ether}("");
+
+        assertFalse(success);
+        assertEq(bytes4(revertData), AssetVault.TokenInvalid.selector);
     }
 
     function test_DepositOnBehalf_ERC20_EmitsExpectedEvent() public {
@@ -637,7 +672,6 @@ contract AssetVaultTest is Test {
         RebalanceWithdrawTestData memory data = _prepareRebalanceWithdrawData(
             address(token1),
             50e18,
-            0,
             rebalanceReceiverAddr,
             1900
         );
@@ -647,7 +681,6 @@ contract AssetVaultTest is Test {
         vault.rebalanceWithdraw(
             address(token1),
             50e18,
-            0,
             data.validators,
             data.signatures,
             data.nonce
@@ -660,7 +693,6 @@ contract AssetVaultTest is Test {
         vault.rebalanceWithdraw(
             address(token1),
             50e18,
-            0,
             new ValidatorInfo[](0),
             new bytes[](0),
             1901
@@ -676,11 +708,9 @@ contract AssetVaultTest is Test {
         vault.setRebalanceReceiver(rebalanceReceiverAddr);
 
         uint256 amount = 50e18;
-        uint256 fee = 1e18;
         RebalanceWithdrawTestData memory data = _prepareRebalanceWithdrawData(
             address(token1),
             amount,
-            fee,
             rebalanceReceiverAddr,
             1902
         );
@@ -690,7 +720,6 @@ contract AssetVaultTest is Test {
             rebalanceReceiverAddr,
             address(token1),
             amount,
-            fee,
             data.nonce
         );
 
@@ -698,14 +727,13 @@ contract AssetVaultTest is Test {
         vault.rebalanceWithdraw(
             address(token1),
             amount,
-            fee,
             data.validators,
             data.signatures,
             data.nonce
         );
 
-        assertEq(token1.balanceOf(rebalanceReceiverAddr), amount - fee);
-        assertEq(vault.fees(address(token1)), fee);
+        assertEq(token1.balanceOf(rebalanceReceiverAddr), amount);
+        assertEq(vault.fees(address(token1)), 0);
     }
 
     function test_RebalanceWithdraw_SignatureBindsReceiver() public {
@@ -721,7 +749,6 @@ contract AssetVaultTest is Test {
         RebalanceWithdrawTestData memory data = _prepareRebalanceWithdrawData(
             address(token1),
             50e18,
-            0,
             rebalanceReceiverAddr,
             1903
         );
@@ -734,7 +761,6 @@ contract AssetVaultTest is Test {
         vault.rebalanceWithdraw(
             address(token1),
             50e18,
-            0,
             data.validators,
             data.signatures,
             data.nonce
@@ -1591,7 +1617,6 @@ contract AssetVaultTest is Test {
     function _prepareRebalanceWithdrawData(
         address token,
         uint256 amount,
-        uint256 fee,
         address receiver,
         uint256 nonce
     ) internal view returns (RebalanceWithdrawTestData memory data) {
@@ -1599,7 +1624,6 @@ contract AssetVaultTest is Test {
         data.digest = _createRebalanceWithdrawDigest(
             token,
             amount,
-            fee,
             receiver,
             nonce
         );
@@ -1760,7 +1784,6 @@ contract AssetVaultTest is Test {
     function _createRebalanceWithdrawDigest(
         address token,
         uint256 amount,
-        uint256 fee,
         address receiver,
         uint256 nonce
     ) internal view returns (bytes32) {
@@ -1771,7 +1794,6 @@ contract AssetVaultTest is Test {
                 address(vault),
                 token,
                 amount,
-                fee,
                 receiver,
                 nonce
             )
