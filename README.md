@@ -13,6 +13,22 @@ It serves four purposes:
 
 The contract is UUPS-upgradeable and built around role-based access control plus validator quorum verification.
 
+## Signature And Nonce Rules
+
+Validator-authorized operations in `AssetVault` do **not** use EIP-712 typed data.
+
+- the contract hashes business fields with `keccak256(abi.encode(...))`
+- the validator signature check then applies `toEthSignedMessageHash`
+- in wallet / infra terminology, this is `personal_sign` / EIP-191 style signing
+
+Nonce handling is also intentionally **non-sequential**.
+
+- the contract only checks whether a nonce has already been used
+- any unused `uint256` nonce is valid
+- nonces do not need to be continuous, increasing, or gap-free
+
+Operationally, monitoring and off-chain services must treat nonce as a one-time unique identifier, not as a sequential counter.
+
 ## Roles
 
 ### `DEFAULT_ADMIN_ROLE`
@@ -126,6 +142,7 @@ Conditions:
 - vault must have enough balance
 - validator signatures must satisfy the configured validator set and required power
 - nonce must be unused
+- nonce does not need to be sequential
 
 Outcome:
 
@@ -139,6 +156,8 @@ Conditions:
 - caller must have `OPERATOR_ROLE`
 - vault must not be globally paused
 - validator signatures must satisfy the configured validator set and required power
+- nonce must be unused
+- nonce does not need to be sequential
 - each withdrawal must exist
 - each withdrawal must be pending
 - each withdrawal must not be executed
@@ -159,6 +178,8 @@ Conditions:
 - caller must have `OPERATOR_ROLE`
 - vault must not be globally paused
 - validator signatures must satisfy the configured validator set and required power
+- nonce must be unused
+- nonce does not need to be sequential
 - each withdrawal must exist
 - each withdrawal must be pending
 - each withdrawal must not be executed
@@ -233,6 +254,8 @@ Conditions:
 - vault must have enough balance
 - `rebalanceReceiver` must be set
 - validator signatures must satisfy the configured validator set and required power
+- nonce must be unused
+- nonce does not need to be sequential
 
 Behavior:
 
@@ -247,6 +270,8 @@ Conditions:
 - caller must have `OPERATOR_ROLE`
 - vault must not be globally paused
 - validator signatures must satisfy the configured validator set and required power
+- nonce must be unused
+- nonce does not need to be sequential
 - each token must be supported
 
 Behavior:

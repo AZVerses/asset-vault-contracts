@@ -38,6 +38,8 @@
 - 所有生产操作必须通过 Safe 或 Safe + Timelock 执行，禁止生产 EOA 直连高权限函数。
 - 任何签名人都不能盲签，必须独立核对网页参数和 Safe 自动生成的 calldata。
 - Safe 域名、链 ID、Safe 地址、Vault Proxy 地址、Timelock 地址、目标 receiver 地址都要逐项核对。
+- 提现相关的 validator 签名使用 `personal_sign` / EIP-191 风格，不是 EIP-712 typed data。
+- 提现相关 nonce 是一次性唯一 `uint256`。只要求未使用，不要求连续、递增或无空洞。
 - 生产签名只允许在专用设备上完成，且必须使用硬件钱包。
 - 新地址、新 token、新 validator、新 implementation 不能只看聊天窗口或截图，必须从可信来源交叉核验。
 - 每次执行后都要做链上状态回读和事件校验，不能只看交易 `Success`。
