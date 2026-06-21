@@ -703,11 +703,11 @@ contract AssetVault is
                 validatorIndex < validators.length;
             signatureIndex++
         ) {
-            address recovered = ECDSA.recover(
+            (address recovered, ECDSA.RecoverError recoverError, ) = ECDSA.tryRecoverCalldata(
                 validatorDigest,
                 validatorSignatures[signatureIndex]
             );
-            if (recovered == address(0)) {
+            if (recoverError != ECDSA.RecoverError.NoError || recovered == address(0)) {
                 continue;
             }
             while (validatorIndex < validators.length) {

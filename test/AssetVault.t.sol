@@ -8,7 +8,6 @@ import {AssetVaultV2} from "./mock/AssetVaultV2.sol";
 import {MockERC20} from "./mock/MockERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 contract WithdrawalExecutionObserver {
     AssetVault public vault;
@@ -1193,7 +1192,7 @@ contract AssetVaultTest is Test {
         assertTrue(testData.pendingAfter && testData.executedAfter);
     }
 
-    function test_Withdraw_WrongSignature_ModifiedSignature_Reverts() public {
+    function test_Withdraw_MalformedSignatureIgnoredWhenPowerInsufficient() public {
         vm.startPrank(user);
         assertTrue(token1.transfer(address(vault), 1000e18));
         vm.stopPrank();
@@ -1212,17 +1211,42 @@ contract AssetVaultTest is Test {
             1020
         );
 
-        bytes memory correctSig = data.signatures[0];
-        bytes memory wrongSig = new bytes(correctSig.length);
-        for (uint256 i = 0; i < correctSig.length; i++) {
-            wrongSig[i] = correctSig[i];
-        }
-        wrongSig[0] = bytes1(uint8(wrongSig[0]) ^ 1);
-        data.signatures[0] = wrongSig;
+        data.signatures = new bytes[](2);
+        data.signatures[0] = hex"1234";
+        data.signatures[1] = _signDigest(data.digest, validator2Key);
 
-        vm.expectRevert(ECDSA.ECDSAInvalidSignature.selector);
+        vm.expectRevert(AssetVault.NotEnoughValidatorPower.selector);
         vm.prank(operator);
         vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
+    }
+
+    function test_Withdraw_MalformedSignatureIgnoredWhenPowerEnough() public {
+        vm.startPrank(user);
+        assertTrue(token1.transfer(address(vault), 1000e18));
+        vm.stopPrank();
+
+        uint256 id = 10;
+        uint256 amount = 50e18;
+        address receiver = address(0x110);
+
+        WithdrawTestData memory data = _prepareRequestWithdrawData(
+            id,
+            address(token1),
+            amount,
+            0,
+            receiver,
+            false,
+            1024
+        );
+        data.signatures = new bytes[](3);
+        data.signatures[0] = hex"1234";
+        data.signatures[1] = _signDigest(data.digest, validator2Key);
+        data.signatures[2] = _signDigest(data.digest, validator3Key);
+
+        vm.prank(operator);
+        vault.requestWithdraw(id, false, data.validators, data.action, data.signatures, data.nonce);
+
+        assertEq(token1.balanceOf(receiver), amount);
     }
 
     function test_Withdraw_WrongSignature_ModifiedAction_Reverts() public {
