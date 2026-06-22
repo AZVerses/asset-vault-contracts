@@ -41,6 +41,7 @@
 - 提现相关的 validator 签名使用 `personal_sign` / EIP-191 风格，不是 EIP-712 typed data。
 - 提现相关 nonce 是一次性唯一 `uint256`。只要求未使用，不要求连续、递增或无空洞。
 - `batchResetWithdrawHotAmount` 会复用 `WithdrawHotAmountRefilled` 事件。在这条路径下，事件里的 `refillAmount` 表示 reset 前的已用额度，不表示自然回补量。
+- validator 轮换必须放在同一笔 Safe batch 交易里执行：先 `addValidators(newSet, newRequiredPower)`，再 `removeValidators(oldSet)`。不要单独发起删除旧集合的交易。
 - 生产签名只允许在专用设备上完成，且必须使用硬件钱包。
 - 新地址、新 token、新 validator、新 implementation 不能只看聊天窗口或截图，必须从可信来源交叉核验。
 - 每次执行后都要做链上状态回读和事件校验，不能只看交易 `Success`。
@@ -151,6 +152,7 @@
   - `addValidators((address,uint256)[],uint256)`: 新增一组 validator 集合，并设置该集合通过校验所需的最小 power。
   - `updateValidatorRequiredPower((address,uint256)[],uint256)`: 不改 validator 成员，只调整这组 validator 的通过门槛。
   - `removeValidators((address,uint256)[])`: 删除一组 validator 集合。
+- 轮换规则：必须使用同一笔 Safe batch 交易，先 `addValidators(newSet, newRequiredPower)`，再 `removeValidators(oldSet)`，以减少 downtime，并尽量缩短新旧 validator 集合同时有效的窗口。
 
 ## PAUSE_ROLE
 
@@ -378,6 +380,7 @@ Timelock 操作有两层 calldata：
 - 参数：
   - `validators`: validator 列表，每项包含 `signer` 和 `power`。
   - `requiredPower`: 该 validator 集合通过校验所需最小 power。
+- 轮换用法：如果这是 validator 轮换的一部分，必须把本调用放在同一笔 Safe batch 交易的 `removeValidators(oldSet)` 之前。
 - ABI JSON:
 
 ```json
@@ -405,6 +408,7 @@ Timelock 操作有两层 calldata：
 - Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
 - 参数：
   - `validators`: 要删除的 validator 集合。
+- 轮换用法：不要把本调用作为单独的轮换交易提交。它必须作为同一笔 Safe batch 交易的第二个调用，排在 `addValidators(newSet, newRequiredPower)` 之后。
 - ABI JSON:
 
 ```json
@@ -529,6 +533,7 @@ Timelock 操作有两层 calldata：
 - 复核重点：
   - `validators` 顺序必须正确
   - `power` 和 `requiredPower` 不能填错
+  - 轮换时，本调用必须和 `removeValidators(oldSet)` 放在同一笔 Safe batch 交易里，并排在前面
 
 ### updateValidatorRequiredPower
 
@@ -545,7 +550,7 @@ Timelock 操作有两层 calldata：
 - Parameters:
   - `validators`: 要删除的原集合，必须与链上完全一致
 - 复核重点：
-  - 删除前必须确认新 validator 集合已经生效
+  - 轮换时，本调用必须和 `addValidators(newSet, newRequiredPower)` 放在同一笔 Safe batch 交易里，并排在后面
   - 删除前必须确认签名服务已经切到新集合
 
 ### toggle

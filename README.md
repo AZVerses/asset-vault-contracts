@@ -48,6 +48,13 @@ Operationally, monitoring and off-chain services must treat nonce as a one-time 
 - updates validator required power
 - removes validator sets
 
+Validator rotation rule:
+
+- rotate validators with one Safe batch transaction that calls `addValidators(newSet, newRequiredPower)` first and `removeValidators(oldSet)` second
+- do not submit standalone `removeValidators` during rotation
+- the goal is to minimize downtime while also minimizing the window where multiple validator sets are simultaneously valid
+- signing services must switch to the new validator set before the batch is signed
+
 ### `TOKEN_ROLE`
 
 - adds supported tokens

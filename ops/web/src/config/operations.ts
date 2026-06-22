@@ -239,7 +239,8 @@ export const operations: OperationDef[] = [
     label: "addValidators",
     role: "VALIDATOR_ROLE",
     mode: "direct",
-    description: "Add a validator set and required power.",
+    description:
+      "Add a validator set and required power. For rotation, batch this before removeValidators(oldSet) in the same Safe transaction.",
     functionName: "addValidators",
     functionSignature: "addValidators((address,uint256)[],uint256)",
     abiJson: abi(
@@ -251,7 +252,7 @@ export const operations: OperationDef[] = [
         name: "validators",
         label: "Validators",
         kind: "validatorTupleArray",
-        help: "Must be in strict ascending signer address order.",
+        help: "Must be in strict ascending signer address order. For rotation, this add call must come before the old-set remove call in the same Safe batch.",
       },
       { name: "requiredPower", label: "Required Power", kind: "uint256", placeholder: "40" },
     ],
@@ -283,7 +284,8 @@ export const operations: OperationDef[] = [
     label: "removeValidators",
     role: "VALIDATOR_ROLE",
     mode: "direct",
-    description: "Remove a validator set.",
+    description:
+      "Remove a validator set. For rotation, do not submit this standalone; batch it after addValidators(newSet) in the same Safe transaction.",
     functionName: "removeValidators",
     functionSignature: "removeValidators((address,uint256)[])",
     abiJson: abi(
@@ -295,7 +297,7 @@ export const operations: OperationDef[] = [
         name: "validators",
         label: "Validators",
         kind: "validatorTupleArray",
-        help: "Confirm the replacement validator set is already active before removal.",
+        help: "For rotation, batch this after addValidators(newSet) in the same Safe transaction, and confirm signing services have switched.",
       },
     ],
   },

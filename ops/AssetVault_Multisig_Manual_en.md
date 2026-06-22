@@ -41,6 +41,7 @@ Key points:
 - Validator signatures for withdrawal-related operator actions use `personal_sign` / EIP-191 style signing, not EIP-712 typed data.
 - Withdrawal-related nonces are one-time unique `uint256` values. They must be unused, but they do not need to be sequential or strictly increasing.
 - `batchResetWithdrawHotAmount` reuses the `WithdrawHotAmountRefilled` event. On that path, the event's `refillAmount` field means the pre-reset used amount, not a natural refill amount.
+- Validator rotation must be submitted as one Safe batch transaction: `addValidators(newSet, newRequiredPower)` first, then `removeValidators(oldSet)`. Do not remove the old set in a standalone transaction.
 - Production signing must be performed on dedicated devices with hardware wallets.
 - New addresses, tokens, validators, and implementations must be cross-checked from trusted sources.
 - Every executed action must be verified on-chain. A successful transaction status alone is not sufficient.
@@ -151,6 +152,7 @@ These must be filled in before the manual is distributed to operators:
   - `addValidators((address,uint256)[],uint256)`: adds a validator set and its required power
   - `updateValidatorRequiredPower((address,uint256)[],uint256)`: updates required power without changing members
   - `removeValidators((address,uint256)[])`: removes a validator set
+- Rotation rule: use a single Safe batch transaction with `addValidators(newSet, newRequiredPower)` first and `removeValidators(oldSet)` second. This minimizes downtime and minimizes the window where both old and new validator sets are valid.
 
 ## PAUSE_ROLE
 
@@ -378,6 +380,7 @@ Timelocked actions have two calldata layers:
 - Parameters:
   - `validators`: validator list; each item has `signer` and `power`.
   - `requiredPower`: minimum power required for this validator set.
+- Rotation usage: when this is part of validator rotation, put this call before `removeValidators(oldSet)` in the same Safe batch transaction.
 - ABI JSON:
 
 ```json
@@ -405,6 +408,7 @@ Timelocked actions have two calldata layers:
 - Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
 - Parameters:
   - `validators`: validator set to remove.
+- Rotation usage: do not submit this as a standalone rotation transaction. It must be the second call in the same Safe batch transaction after `addValidators(newSet, newRequiredPower)`.
 - ABI JSON:
 
 ```json
@@ -529,6 +533,7 @@ Timelocked actions have two calldata layers:
 - Review focus:
   - validator order must be correct
   - `power` and `requiredPower` must be checked item by item
+  - for rotation, this call must be batched before `removeValidators(oldSet)` in the same Safe transaction
 
 ### updateValidatorRequiredPower
 
@@ -545,7 +550,7 @@ Timelocked actions have two calldata layers:
 - Parameters:
   - `validators`: validator set to remove, must exactly match the on-chain set
 - Review focus:
-  - confirm the new validator set is already active
+  - for rotation, this call must be batched after `addValidators(newSet, newRequiredPower)` in the same Safe transaction
   - confirm signing services have already switched
 
 ### toggle
