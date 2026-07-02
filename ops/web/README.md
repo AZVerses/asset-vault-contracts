@@ -8,7 +8,8 @@ It supports:
 - whitelisted multisig operations only
 - ABI JSON display for each operation
 - calldata encode for direct Safe actions
-- two-step calldata encode for `ADMIN_ROLE` and `UPGRADE_ROLE` actions through OpenZeppelin `TimelockController`
+- two-step calldata encode for `DEFAULT_ADMIN_ROLE`, `ADMIN_ROLE`, and `UPGRADE_ROLE` actions through OpenZeppelin `TimelockController`
+- manual Timelock `operation id` input for cancel flows
 - calldata decode for pasted direct or timelock calldata
 
 ## Local development

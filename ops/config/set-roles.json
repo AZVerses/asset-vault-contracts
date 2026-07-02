@@ -16,8 +16,10 @@
       "roles": {
         "defaultAdmin": {
           "name": "DEFAULT_ADMIN_ROLE",
-          "holderType": "DIRECT_SAFE",
+          "holderType": "TIMELOCK",
           "safe": "0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
           "revokeFrom": []
         },
         "admin": {
@@ -84,8 +86,10 @@
       "roles": {
         "defaultAdmin": {
           "name": "DEFAULT_ADMIN_ROLE",
-          "holderType": "DIRECT_SAFE",
+          "holderType": "TIMELOCK",
           "safe": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
           "revokeFrom": []
         },
         "admin": {
@@ -152,8 +156,10 @@
       "roles": {
         "defaultAdmin": {
           "name": "DEFAULT_ADMIN_ROLE",
-          "holderType": "DIRECT_SAFE",
+          "holderType": "TIMELOCK",
           "safe": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "timelock": "0x0000000000000000000000000000000000000000",
+          "minDelay": 259200,
           "revokeFrom": []
         },
         "admin": {

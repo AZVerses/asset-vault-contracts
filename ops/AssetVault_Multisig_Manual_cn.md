@@ -8,14 +8,14 @@
 - Safe 网页端的填写方式
 - Lark 审批流程要求
 
-`ADMIN_ROLE` 和 `UPGRADE_ROLE` 必须经过 Timelock，其余高权限操作为 Safe 直连 `Vault Proxy`。
+`DEFAULT_ADMIN_ROLE`、`ADMIN_ROLE` 和 `UPGRADE_ROLE` 必须经过 Timelock，其余高权限操作为 Safe 直连 `Vault Proxy`。
 
 # 治理结构
 
 当前建议的治理拆分如下：
 
 - `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `UPGRADE_ROLE`
-- `Governance Safe (4/7)` -> `DEFAULT_ADMIN_ROLE`
+- `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `DEFAULT_ADMIN_ROLE`
 - `Admin Safe (4/7)` -> `Admin Timelock (72h)` -> `ADMIN_ROLE`
 - `Token Safe (4/7)` -> `TOKEN_ROLE`
 - `Validator Safe (4/7)` -> `VALIDATOR_ROLE`
@@ -27,7 +27,7 @@
 
 - 只有 `UPGRADE_ROLE` 负责合约升级，且必须经过 Timelock。
 - `ADMIN_ROLE` 负责挑战期、rebalance receiver 和手续费提取，也必须经过 Timelock。
-- `DEFAULT_ADMIN_ROLE` 不负责合约升级。
+- `DEFAULT_ADMIN_ROLE` 不负责合约升级，但负责角色授予和回收，必须经过 Governance Timelock。
 - `TOKEN_ROLE`、`VALIDATOR_ROLE`、`PAUSE_ROLE` 是 Safe 直连 `Vault Proxy`。
 - validator 轮换时，必须先 `addValidators`，确认新集合可用后，再 `removeValidators` 旧集合。
 
@@ -80,6 +80,7 @@
 - 所有生产高权限操作都应先走 Lark 审批流程，再进入 Safe 或 Safe + Timelock 执行。
 - 审批记录至少应包含：操作名称、目标链、目标合约、目标函数、参数明细、业务原因、风险说明、交易哈希。
 - Timelock 操作应额外记录：`salt`、`schedule` 交易哈希、`execute` 交易哈希。
+- 如需取消已 schedule 但未执行的操作，还应记录被取消的 Timelock `operation id` 和 `cancel` 交易哈希。
 - Lark 审批记录应能和最终链上交易一一对应，便于回溯。
 
 # 链上地址
@@ -109,8 +110,8 @@
 
 ## DEFAULT_ADMIN_ROLE
 
-- Holder: `Governance Safe`
-- Upstream signer threshold: `4/7`
+- Holder: `Governance Timelock (72h)`
+- Upstream signer threshold: `Governance Safe 4/7`
 - Hash ID: `0x0000000000000000000000000000000000000000000000000000000000000000`
 - Responsibilities:
   - `grantRole(bytes32,address)`: 给指定地址授予某个角色，使该地址获得对应管理权限。
@@ -184,14 +185,14 @@
 
 - Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
 - Admin Timelock: `ops/config/set-roles.json` 的 `chains.arb1.roles.admin.timelock`
-- Governance Timelock: `ops/config/set-roles.json` 的 `chains.arb1.roles.upgrade.timelock`
-- 当前 Timelock delay: `259200` 秒
+- Governance Timelock: `ops/config/set-roles.json` 的 `chains.arb1.roles.defaultAdmin.timelock` 和 `chains.arb1.roles.upgrade.timelock`
+- 当前 Timelock delay: 以各 Timelock 合约配置为准；demo 配置为 `259200` 秒。
 
 注意：Timelock 地址必须以 `ops/config/set-roles.json` 中的最终值为准。如果该字段仍为 `0x0000000000000000000000000000000000000000`，说明该 Timelock 尚未完成部署或配置写回，不能发起对应操作。
 
 ## Direct 操作如何填写 Safe
 
-适用操作：`grantRole`、`revokeRole`、`addToken`、`updateToken`、`addValidators`、`updateValidatorRequiredPower`、`removeValidators`、`toggle`。
+适用操作：`addToken`、`updateToken`、`addValidators`、`updateValidatorRequiredPower`、`removeValidators`、`toggle`。
 
 1. 打开 `Multisig Calldata Checker`，选择目标链和操作。
 2. 选择 `Encode`，按审批单填写参数。
@@ -206,7 +207,7 @@
 
 ## Timelock 操作如何填写 Safe
 
-适用操作：`updatePendingWithdrawChallengePeriod`、`setRebalanceReceiver`、`withdrawFees`、`upgradeToAndCall`。
+适用操作：`grantRole`、`revokeRole`、`updatePendingWithdrawChallengePeriod`、`setRebalanceReceiver`、`withdrawFees`、`upgradeToAndCall`。
 
 Timelock 操作有两层 calldata：
 
@@ -254,13 +255,24 @@ Timelock 操作有两层 calldata：
 6. Safe `Review` 页面复制 `Data`，用 checker `Decode` 解出 outer 和 inner calldata。
 7. 只有 outer 参数与 schedule 完全一致，且 inner 业务参数仍然正确，才进入签名。
 
+### 发起 cancel
+
+1. 在 checker 中选择对应 Timelock 操作并切换到 `cancel`。
+2. checker 会尝试从链上 `CallScheduled` 事件读取当前仍 pending 的 operation id，并用 `isOperationPending(id)` 过滤。
+3. 如果 RPC 日志查询失败，可以从审批记录或 schedule 交易事件中手工粘贴 `operation id`。
+4. Safe `To` 填对应 Timelock。
+5. Safe `ABI JSON` 粘贴 `cancel` ABI。
+6. Safe 参数填写：
+   - `id`: 要取消的 Timelock operation id。
+
 ## 操作清单和 ABI JSON
 
 ### `grantRole(bytes32,address)`
 
 - Role: `DEFAULT_ADMIN_ROLE`
-- Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Path: Governance Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Governance Timelock
 - 参数：
   - `role`: 使用 checker 下拉选择，不要手输 role hash。
   - `account`: 被授予角色的地址。
@@ -273,8 +285,9 @@ Timelock 操作有两层 calldata：
 ### `revokeRole(bytes32,address)`
 
 - Role: `DEFAULT_ADMIN_ROLE`
-- Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Path: Governance Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Governance Timelock
 - 参数：
   - `role`: 使用 checker 下拉选择，不要手输 role hash。
   - `account`: 被回收角色的地址。
@@ -440,6 +453,12 @@ Timelock 操作有两层 calldata：
 
 ```json
 [{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"execute","outputs":[],"stateMutability":"payable","type":"function"}]
+```
+
+### `cancel(bytes32)`
+
+```json
+[{"inputs":[{"internalType":"bytes32","name":"id","type":"bytes32"}],"name":"cancel","outputs":[],"stateMutability":"nonpayable","type":"function"}]
 ```
 
 ## 支持的操作

@@ -76,8 +76,9 @@ export const operations: OperationDef[] = [
     id: "grant-role",
     label: "grantRole",
     role: "DEFAULT_ADMIN_ROLE",
-    mode: "direct",
-    description: "Grant a role to an address.",
+    mode: "timelock",
+    timelockType: "governance",
+    description: "Grant a role to an address through Governance Timelock.",
     functionName: "grantRole",
     functionSignature: "grantRole(bytes32,address)",
     abiJson: abi(
@@ -93,8 +94,9 @@ export const operations: OperationDef[] = [
     id: "revoke-role",
     label: "revokeRole",
     role: "DEFAULT_ADMIN_ROLE",
-    mode: "direct",
-    description: "Revoke a role from an address.",
+    mode: "timelock",
+    timelockType: "governance",
+    description: "Revoke a role from an address through Governance Timelock.",
     functionName: "revokeRole",
     functionSignature: "revokeRole(bytes32,address)",
     abiJson: abi(
@@ -323,5 +325,8 @@ export const timelockAbis = {
   ),
   execute: abi(
     '[{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"execute","outputs":[],"stateMutability":"payable","type":"function"}]',
+  ),
+  cancel: abi(
+    '[{"inputs":[{"internalType":"bytes32","name":"id","type":"bytes32"}],"name":"cancel","outputs":[],"stateMutability":"nonpayable","type":"function"}]',
   ),
 };

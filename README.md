@@ -35,6 +35,7 @@ Operationally, monitoring and off-chain services must treat nonce as a one-time 
 
 - grants and revokes all roles
 - highest authority in the role tree
+- production holder should be timelock-backed, not a direct Safe holder
 
 ### `ADMIN_ROLE`
 

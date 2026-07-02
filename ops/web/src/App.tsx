@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Interface } from "ethers";
+import { AbiCoder, hexlify, isHexString, keccak256, randomBytes } from "ethers";
 import { chains, ZERO_HASH } from "./config/chains";
 import { operations, timelockAbis, type OperationDef, type ParamDef } from "./config/operations";
 import {
@@ -11,14 +11,17 @@ import {
 } from "./lib/abi";
 
 type FormState = Record<string, string | boolean | ValidatorInput[]>;
-type TimelockMode = "schedule" | "execute";
+type TimelockMode = "schedule" | "execute" | "cancel";
 type InteractionMode = "encode" | "decode";
+type DisplayRow = { label: string; value: string; copyable?: boolean };
 
 const initialValidatorRows = (): ValidatorInput[] => [
   { signer: "", power: "" },
   { signer: "", power: "" },
   { signer: "", power: "" },
 ];
+
+const randomTimelockSalt = () => hexlify(randomBytes(32));
 
 const buildInitialFormState = (operation: OperationDef): FormState =>
   Object.fromEntries(
@@ -40,16 +43,48 @@ const copy = async (value: string) => {
   await navigator.clipboard.writeText(value);
 };
 
+const hashTimelockOperation = (
+  target: string,
+  value: string,
+  data: string,
+  predecessor: string,
+  salt: string,
+) =>
+  keccak256(
+    AbiCoder.defaultAbiCoder().encode(
+      ["address", "uint256", "bytes", "bytes32", "bytes32"],
+      [target, value, data, predecessor, salt],
+    ),
+  );
+
+const formatInputValue = (value: unknown) => formatDecodedValue(value);
+
+const rowsFromOperationArgs = (operation: OperationDef, args: unknown[]): DisplayRow[] =>
+  operation.params.map((param, index) => ({
+    label: param.name,
+    value: formatInputValue(args[index]),
+    copyable: true,
+  }));
+
+const timelockAbiForAction = (action: TimelockMode) => {
+  if (action === "schedule") {
+    return timelockAbis.schedule;
+  }
+  if (action === "execute") {
+    return timelockAbis.execute;
+  }
+  return timelockAbis.cancel;
+};
+
 const App = () => {
   const [chainId, setChainId] = useState(chains[0].id);
   const [operationId, setOperationId] = useState(operations[0].id);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>("encode");
   const [timelockAction, setTimelockAction] = useState<TimelockMode>("schedule");
-  const [timelockSalt, setTimelockSalt] = useState(ZERO_HASH);
-  const [timelockPredecessor, setTimelockPredecessor] = useState(ZERO_HASH);
+  const [timelockSalt, setTimelockSalt] = useState(randomTimelockSalt);
+  const [cancelOperationId, setCancelOperationId] = useState("");
   const [decodeInput, setDecodeInput] = useState("");
-  const [generatedCalldata, setGeneratedCalldata] = useState("");
-  const [generatedTimelockCalldata, setGeneratedTimelockCalldata] = useState("");
+  const [generatedRows, setGeneratedRows] = useState<DisplayRow[]>([]);
   const [lastError, setLastError] = useState("");
   const [copyNotice, setCopyNotice] = useState("");
   const [formState, setFormState] = useState<FormState>(() => buildInitialFormState(operations[0]));
@@ -60,10 +95,20 @@ const App = () => {
     [operationId],
   );
   const isTimelocked = operation.mode === "timelock";
-  const timelockTarget =
+  const activeTimelock =
     operation.timelockType === "admin" ? chain.adminTimelock : chain.governanceTimelock;
-  const timelockLabel =
-    operation.timelockType === "admin" ? "Admin Timelock" : "Governance Timelock";
+  const timelockTarget = activeTimelock.address;
+  const timelockBadge = isTimelocked
+    ? `timelock:${Math.round(activeTimelock.delaySeconds / 3600)}h`
+    : "direct";
+  const operationModeBadge = (item: OperationDef) => {
+    if (item.mode === "direct") {
+      return "direct";
+    }
+    const itemTimelock =
+      item.timelockType === "admin" ? chain.adminTimelock : chain.governanceTimelock;
+    return `timelock:${Math.round(itemTimelock.delaySeconds / 3600)}h`;
+  };
 
   useEffect(() => {
     if (!copyNotice) {
@@ -82,10 +127,9 @@ const App = () => {
     setOperationId(nextOperation.id);
     setInteractionMode("encode");
     setTimelockAction("schedule");
-    setTimelockSalt(ZERO_HASH);
-    setTimelockPredecessor(ZERO_HASH);
-    setGeneratedCalldata("");
-    setGeneratedTimelockCalldata("");
+    setTimelockSalt(randomTimelockSalt());
+    setCancelOperationId("");
+    setGeneratedRows([]);
     setDecodeInput("");
     setLastError("");
     setFormState(buildInitialFormState(nextOperation));
@@ -125,100 +169,175 @@ const App = () => {
     });
   };
 
+  const buildDirectRows = (
+    operationArgs: unknown[],
+  ): DisplayRow[] => [
+    { label: "To Address", value: chain.vaultProxy, copyable: true },
+    { label: "ETH Value", value: "0", copyable: true },
+    { label: "ABI", value: operation.abiJson, copyable: true },
+    ...rowsFromOperationArgs(operation, operationArgs),
+  ];
+
+  const buildTimelockRows = (
+    businessCalldata: string,
+    operationArgs: unknown[],
+    salt: string,
+  ): DisplayRow[] => {
+    const operationIdHash = hashTimelockOperation(
+      chain.vaultProxy,
+      "0",
+      businessCalldata,
+      ZERO_HASH,
+      salt,
+    );
+
+    if (timelockAction === "cancel") {
+      return [
+        { label: "To Address", value: timelockTarget, copyable: true },
+        { label: "ETH Value", value: "0", copyable: true },
+        { label: "ABI", value: timelockAbis.cancel, copyable: true },
+        { label: "id", value: operationIdHash, copyable: true },
+        ...rowsFromOperationArgs(operation, operationArgs),
+      ];
+    }
+
+    return [
+      { label: "To Address", value: timelockTarget, copyable: true },
+      { label: "ETH Value", value: "0", copyable: true },
+      { label: "ABI", value: timelockAbiForAction(timelockAction), copyable: true },
+      { label: "target", value: chain.vaultProxy, copyable: true },
+      { label: "value", value: "0", copyable: true },
+      { label: "data", value: businessCalldata, copyable: true },
+      { label: "predecessor", value: ZERO_HASH, copyable: true },
+      { label: "salt", value: salt, copyable: true },
+      ...(timelockAction === "schedule"
+        ? [{ label: "delay", value: String(activeTimelock.delaySeconds), copyable: true }]
+        : []),
+      { label: "operation id", value: operationIdHash, copyable: true },
+    ];
+  };
+
   const handleGenerate = () => {
     try {
-      const args = toEncodeArgs(operation.params, formState);
-      const calldata = encodeFunctionData(operation.abiJson, operation.functionName, args);
-      setGeneratedCalldata(calldata);
-      setLastError("");
-
-      if (isTimelocked) {
-        const timelockIface = new Interface(
-          timelockAction === "schedule" ? timelockAbis.schedule : timelockAbis.execute,
-        );
-        const timelockArgs =
-          timelockAction === "schedule"
-            ? [
-                chain.vaultProxy,
-                0,
-                calldata,
-                timelockPredecessor,
-                timelockSalt,
-                chain.timelockDelaySeconds,
-              ]
-            : [chain.vaultProxy, 0, calldata, timelockPredecessor, timelockSalt];
-        setGeneratedTimelockCalldata(timelockIface.encodeFunctionData(timelockAction, timelockArgs));
-      } else {
-        setGeneratedTimelockCalldata("");
+      if (isTimelocked && timelockAction === "cancel") {
+        const id = cancelOperationId.trim();
+        if (!isHexString(id, 32)) {
+          throw new Error("Operation id must be a 32-byte hex value.");
+        }
+        setGeneratedRows([
+          { label: "To Address", value: timelockTarget, copyable: true },
+          { label: "ETH Value", value: "0", copyable: true },
+          { label: "ABI", value: timelockAbis.cancel, copyable: true },
+          { label: "id", value: id, copyable: true },
+        ]);
+        setLastError("");
+        return;
       }
+
+      const operationArgs = toEncodeArgs(operation.params, formState);
+      const businessCalldata = encodeFunctionData(
+        operation.abiJson,
+        operation.functionName,
+        operationArgs,
+      );
+      const nextSalt = isTimelocked && timelockAction === "schedule" ? randomTimelockSalt() : timelockSalt;
+      setTimelockSalt(nextSalt);
+      setGeneratedRows(
+        isTimelocked
+          ? buildTimelockRows(businessCalldata, operationArgs, nextSalt)
+          : buildDirectRows(operationArgs),
+      );
+      setLastError("");
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : "Failed to generate calldata.");
+      setGeneratedRows([]);
+      setLastError(error instanceof Error ? error.message : "Failed to generate parameters.");
     }
   };
 
-  const decodedDirectRows = useMemo(() => {
-    if (operation.mode !== "direct" || !decodeInput.trim()) {
-      return [];
+  const decodeResult = useMemo(() => {
+    if (!decodeInput.trim()) {
+      return { rows: [] as DisplayRow[], error: "" };
     }
-    try {
-      const decoded = decodeFunctionData(operation.abiJson, operation.functionName, decodeInput.trim());
-      setLastError("");
-      return operation.params.map((param, index) => ({
-        label: param.label,
-        value: formatDecodedValue(decoded[index]),
-      }));
-    } catch (error) {
-      setLastError(error instanceof Error ? error.message : "Failed to decode calldata.");
-      return [];
-    }
-  }, [decodeInput, operation]);
 
-  const decodedTimelockData = useMemo(() => {
-    if (!isTimelocked || !decodeInput.trim()) {
-      return null;
-    }
     try {
+      if (!isTimelocked) {
+        const decoded = decodeFunctionData(
+          operation.abiJson,
+          operation.functionName,
+          decodeInput.trim(),
+        );
+        return {
+          rows: [
+            { label: "To Address", value: chain.vaultProxy, copyable: true },
+            ...operation.params.map((param, index) => ({
+              label: param.name,
+              value: formatDecodedValue(decoded[index]),
+              copyable: true,
+            })),
+          ],
+          error: "",
+        };
+      }
+
+      if (timelockAction === "cancel") {
+        const decoded = decodeFunctionData(timelockAbis.cancel, "cancel", decodeInput.trim());
+        return {
+          rows: [
+            { label: "To Address", value: timelockTarget, copyable: true },
+            { label: "id", value: formatDecodedValue(decoded[0]), copyable: true },
+          ],
+          error: "",
+        };
+      }
+
       const abiJson = timelockAction === "schedule" ? timelockAbis.schedule : timelockAbis.execute;
       const decoded = decodeFunctionData(abiJson, timelockAction, decodeInput.trim());
-      setLastError("");
-      return decoded;
-    } catch (error) {
-      setLastError(error instanceof Error ? error.message : "Failed to decode Timelock calldata.");
-      return null;
-    }
-  }, [decodeInput, isTimelocked, timelockAction]);
+      const data = String(decoded[2]);
+      const salt = String(decoded[4]);
+      const operationIdHash = hashTimelockOperation(
+        String(decoded[0]),
+        String(decoded[1]),
+        data,
+        String(decoded[3]),
+        salt,
+      );
+      const rows: DisplayRow[] = [
+        { label: "To Address", value: timelockTarget, copyable: true },
+        { label: "target", value: formatDecodedValue(decoded[0]), copyable: true },
+        { label: "value", value: formatDecodedValue(decoded[1]), copyable: true },
+        { label: "data", value: data, copyable: true },
+        { label: "predecessor", value: formatDecodedValue(decoded[3]), copyable: true },
+        { label: "salt", value: salt, copyable: true },
+        ...(timelockAction === "schedule"
+          ? [{ label: "delay", value: formatDecodedValue(decoded[5]), copyable: true }]
+          : []),
+        { label: "operation id", value: operationIdHash, copyable: true },
+      ];
 
-  const decodedTimelockRows = useMemo(() => {
-    if (!decodedTimelockData) {
-      return [];
-    }
-    const labels =
-      timelockAction === "schedule"
-        ? ["Target", "Value", "Data", "Predecessor", "Salt", "Delay"]
-        : ["Target", "Value", "Data", "Predecessor", "Salt"];
-    return labels.map((label, index) => ({
-      label,
-      value: formatDecodedValue(decodedTimelockData[index]),
-    }));
-  }, [decodedTimelockData, timelockAction]);
+      try {
+        const innerDecoded = decodeFunctionData(operation.abiJson, operation.functionName, data);
+        rows.push(
+          ...operation.params.map((param, index) => ({
+            label: param.name,
+            value: formatDecodedValue(innerDecoded[index]),
+            copyable: true,
+          })),
+        );
+      } catch {
+        rows.push({
+          label: "data decode",
+          value: "Cannot decode data with the selected operation ABI.",
+        });
+      }
 
-  const decodedInnerRows = useMemo(() => {
-    if (!isTimelocked || !decodedTimelockData) {
-      return [];
-    }
-    try {
-      const innerCalldata = String(decodedTimelockData[2]);
-      const decoded = decodeFunctionData(operation.abiJson, operation.functionName, innerCalldata);
-      setLastError("");
-      return operation.params.map((param, index) => ({
-        label: param.label,
-        value: formatDecodedValue(decoded[index]),
-      }));
+      return { rows, error: "" };
     } catch (error) {
-      setLastError(error instanceof Error ? error.message : "Failed to decode inner business calldata.");
-      return [];
+      return {
+        rows: [] as DisplayRow[],
+        error: error instanceof Error ? error.message : "Failed to decode calldata.",
+      };
     }
-  }, [decodedTimelockData, isTimelocked, operation]);
+  }, [chain.vaultProxy, decodeInput, isTimelocked, operation, timelockAction, timelockTarget]);
 
   return (
     <div className="shell compact-shell">
@@ -228,9 +347,9 @@ const App = () => {
       <header className="hero compact-hero">
         <div className="hero-copy-block">
           <p className="eyebrow">AssetVault Ops</p>
-          <h1>Multisig calldata checker</h1>
+          <h1>Safe parameters generator</h1>
           <p className="hero-copy">
-            Review and verify whitelisted Safe calldata without local tooling.
+            Fill only the required business fields, then copy the exact fields needed in Safe.
           </p>
         </div>
       </header>
@@ -243,7 +362,7 @@ const App = () => {
               <p>Target addresses are fixed per chain.</p>
             </div>
           </div>
-          <div className="compact-stack">
+          <div className="chain-layout">
             <div className="chain-list">
               {chains.map((item) => (
                 <button
@@ -258,24 +377,20 @@ const App = () => {
               ))}
             </div>
 
-            <div className="chain-info-grid">
-              <div className="chain-info-item">
-                <span>Vault Proxy</span>
+            <div className="chain-info-compact">
+              <p>
+                <span>vault:</span>
                 <code>{chain.vaultProxy}</code>
-              </div>
-              <div className="chain-info-item">
-                <span>Admin Timelock</span>
-                <code>{chain.adminTimelock}</code>
-              </div>
-              <div className="chain-info-item">
-                <span>Governance Timelock</span>
-                <code>{chain.governanceTimelock}</code>
-              </div>
-              <div className="chain-info-item">
-                <span>Timelock Delay</span>
-                <strong>{chain.timelockDelaySeconds}s</strong>
-                <small>{chain.addressNote}</small>
-              </div>
+              </p>
+              <p>
+                <span>admin timelock:</span>
+                <code>{chain.adminTimelock.address}</code>
+              </p>
+              <p>
+                <span>governance timelock:</span>
+                <code>{chain.governanceTimelock.address}</code>
+              </p>
+              <small>{chain.addressNote}</small>
             </div>
           </div>
         </section>
@@ -284,7 +399,7 @@ const App = () => {
           <div className="section-heading">
             <div>
               <h2>2. Select operation</h2>
-              <p>Select a whitelisted operation and review the execution path.</p>
+              <p>Select the function and whether you want to generate or decode parameters.</p>
             </div>
           </div>
 
@@ -297,7 +412,10 @@ const App = () => {
                 type="button"
               >
                 <span>{item.label}</span>
-                <small>{item.role}</small>
+                <div className="op-badges">
+                  <small>{item.role}</small>
+                  <small>{operationModeBadge(item)}</small>
+                </div>
               </button>
             ))}
           </div>
@@ -312,7 +430,7 @@ const App = () => {
                   setLastError("");
                 }}
               >
-                Encode
+                Generate parameters
               </button>
               <button
                 type="button"
@@ -322,7 +440,7 @@ const App = () => {
                   setLastError("");
                 }}
               >
-                Decode
+                Decode calldata
               </button>
             </div>
           </div>
@@ -336,155 +454,95 @@ const App = () => {
               </div>
               <div className="badge-stack">
                 <span className="badge">{operation.role}</span>
-                <span className="badge soft">
-                  {operation.mode === "direct" ? "Vault Proxy" : timelockLabel}
-                </span>
+                <span className="badge soft">{timelockBadge}</span>
               </div>
-            </div>
-
-            <div className="detail-grid compact single-row-info">
-              <div className="detail-card compact">
-                <span>Target</span>
-                <strong>{chain.vaultProxy}</strong>
-                <small>Vault Proxy</small>
-              </div>
-              {isTimelocked ? (
-                <div className="detail-card compact">
-                  <span>Outer Target</span>
-                  <strong>{timelockTarget}</strong>
-                  <small>{timelockLabel}</small>
-                </div>
-              ) : null}
-              <div className="detail-card compact">
-                <span>Function Signature</span>
-                <strong>{operation.functionSignature}</strong>
-                <small>{isTimelocked ? "Inner business function" : "Direct function"}</small>
-              </div>
-              {isTimelocked ? (
-                <div className="detail-card compact">
-                  <span>Delay</span>
-                  <strong>{chain.timelockDelaySeconds}s</strong>
-                  <small>OpenZeppelin TimelockController</small>
-                </div>
-              ) : null}
             </div>
           </div>
         </section>
 
         <section className="panel flow-panel">
           <div className="section-heading">
-            <h2>3. {interactionMode === "encode" ? "Parameters" : "Input calldata"}</h2>
+            <h2>3. {interactionMode === "encode" ? "Required fields" : "Input calldata"}</h2>
             <p>
               {interactionMode === "encode"
-                ? "Fill parameters and generate calldata."
-                : "Paste calldata and decode it with the selected interface."}
+                ? "Only fill the business function fields. Timelock predecessor, salt, and delay are handled below."
+                : "Paste calldata. ABI JSON is intentionally hidden; decoding uses the selected function."}
             </p>
           </div>
 
+          {isTimelocked ? (
+            <div className="timelock-action-row">
+              <span>Timelock action</span>
+              <div className="segmented">
+                <button
+                  type="button"
+                  className={timelockAction === "schedule" ? "active" : ""}
+                  onClick={() => setTimelockAction("schedule")}
+                >
+                  schedule
+                </button>
+                <button
+                  type="button"
+                  className={timelockAction === "execute" ? "active" : ""}
+                  onClick={() => setTimelockAction("execute")}
+                >
+                  execute
+                </button>
+                <button
+                  type="button"
+                  className={timelockAction === "cancel" ? "active" : ""}
+                  onClick={() => setTimelockAction("cancel")}
+                >
+                  cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {interactionMode === "encode" ? (
             <div className="compact-stack">
-              <CodeBlock title="ABI JSON" value={operation.abiJson} onCopy={handleCopy} />
-
-              <div className="form-grid compact">
-                {operation.params.map((param) => (
-                  <ParamField
-                    key={param.name}
-                    param={param}
-                    value={formState[param.name]}
-                    onChange={handleFieldChange}
-                    onValidatorChange={handleValidatorChange}
-                    onAddValidatorRow={addValidatorRow}
-                    onRemoveValidatorRow={removeValidatorRow}
-                  />
-                ))}
-              </div>
-
-              {isTimelocked ? (
-                <div className="timelock-box">
-                  <div className="timelock-header">
-                    <h3>Timelock wrapper</h3>
-                    <div className="segmented">
-                      <button
-                        type="button"
-                        className={timelockAction === "schedule" ? "active" : ""}
-                        onClick={() => setTimelockAction("schedule")}
-                      >
-                        schedule
-                      </button>
-                      <button
-                        type="button"
-                        className={timelockAction === "execute" ? "active" : ""}
-                        onClick={() => setTimelockAction("execute")}
-                      >
-                        execute
-                      </button>
-                    </div>
-                  </div>
-                  <CodeBlock
-                    title={`${timelockAction} ABI JSON`}
-                    value={timelockAction === "schedule" ? timelockAbis.schedule : timelockAbis.execute}
-                    onCopy={handleCopy}
-                  />
-                  <div className="field-grid compact">
-                    <label className="field">
-                      <span>Predecessor</span>
-                      <input
-                        value={timelockPredecessor}
-                        onChange={(event) => setTimelockPredecessor(event.target.value)}
-                        placeholder={ZERO_HASH}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Salt</span>
-                      <input
-                        value={timelockSalt}
-                        onChange={(event) => setTimelockSalt(event.target.value)}
-                        placeholder={ZERO_HASH}
-                      />
-                    </label>
-                  </div>
+              {isTimelocked && timelockAction === "cancel" ? (
+                <div className="cancel-picker">
+                  <label className="field">
+                    <span>id</span>
+                    <input
+                      value={cancelOperationId}
+                      onChange={(event) => setCancelOperationId(event.target.value)}
+                      placeholder="Timelock operation id: 0x..."
+                    />
+                    <small>Paste the operation id from the approval record or schedule event.</small>
+                  </label>
                 </div>
-              ) : null}
+              ) : (
+                <div className="form-grid compact">
+                  {operation.params.map((param) => (
+                    <ParamField
+                      key={param.name}
+                      param={param}
+                      value={formState[param.name]}
+                      onChange={handleFieldChange}
+                      onValidatorChange={handleValidatorChange}
+                      onAddValidatorRow={addValidatorRow}
+                      onRemoveValidatorRow={removeValidatorRow}
+                    />
+                  ))}
+                </div>
+              )}
 
               <button className="primary-action compact-action" type="button" onClick={handleGenerate}>
-                Generate calldata
+                Generate parameters
               </button>
+              {isTimelocked && timelockAction === "execute" ? (
+                <p className="hint-text">
+                  Execute uses the retained salt from schedule. Generate schedule first and reuse the
+                  shown salt / operation id for later execution.
+                </p>
+              ) : null}
             </div>
           ) : (
             <div className="compact-stack">
-              <CodeBlock title="ABI JSON" value={operation.abiJson} onCopy={handleCopy} />
-
-              {isTimelocked ? (
-                <div className="decode-switch-row">
-                  <div className="segmented">
-                    <button
-                      type="button"
-                      className={timelockAction === "schedule" ? "active" : ""}
-                      onClick={() => setTimelockAction("schedule")}
-                    >
-                      schedule
-                    </button>
-                    <button
-                      type="button"
-                      className={timelockAction === "execute" ? "active" : ""}
-                      onClick={() => setTimelockAction("execute")}
-                    >
-                      execute
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {isTimelocked ? (
-                <CodeBlock
-                  title={`${timelockAction} ABI JSON`}
-                  value={timelockAction === "schedule" ? timelockAbis.schedule : timelockAbis.execute}
-                  onCopy={handleCopy}
-                />
-              ) : null}
-
               <label className="field field-full">
-                <span>{operation.mode === "direct" ? "Direct calldata" : "Timelock calldata"}</span>
+                <span>Calldata</span>
                 <textarea
                   rows={6}
                   value={decodeInput}
@@ -496,68 +554,31 @@ const App = () => {
           )}
 
           {lastError ? <p className="error-text">{lastError}</p> : null}
+          {decodeResult.error ? <p className="error-text">{decodeResult.error}</p> : null}
         </section>
 
         <section className="panel flow-panel">
           <div className="section-heading">
-            <h2>4. {interactionMode === "encode" ? "Calldata" : "Decoded result"}</h2>
+            <h2>4. {interactionMode === "encode" ? "Safe fields to copy" : "Decoded parameters"}</h2>
             <p>
               {interactionMode === "encode"
-                ? "Review and copy the generated calldata."
-                : "Review decoded fields before signing."}
+                ? "These are display-only fields. Copy them one by one into the Safe interface."
+                : "Decoded values are shown directly from the selected ABI."}
             </p>
           </div>
 
           {interactionMode === "encode" ? (
-            <div className="result-layout">
-              <OutputCard
-                title={operation.mode === "direct" ? "Direct calldata" : "Inner calldata"}
-                subtitle={
-                  operation.mode === "direct"
-                    ? "Vault Proxy target"
-                    : "Business function calldata for Vault Proxy"
-                }
-                target={chain.vaultProxy}
-                calldata={generatedCalldata}
-                onCopy={handleCopy}
-              />
-              {isTimelocked ? (
-                <OutputCard
-                  title={`Outer ${timelockAction} calldata`}
-                  subtitle={`${timelockLabel} target`}
-                  target={timelockTarget}
-                  calldata={generatedTimelockCalldata}
-                  onCopy={handleCopy}
-                />
-              ) : null}
-            </div>
+            <DisplayRows
+              rows={generatedRows}
+              emptyText="Fill the required fields and click Generate parameters."
+              onCopy={handleCopy}
+            />
           ) : (
-            <div className="result-layout">
-              {operation.mode === "direct" ? (
-                <div className="subpanel compact-panel">
-                  <div className="section-heading compact">
-                    <h3>Decoded parameters</h3>
-                  </div>
-                  <DecodedRows rows={decodedDirectRows} />
-                </div>
-              ) : null}
-              {isTimelocked ? (
-                <div className="subpanel compact-panel">
-                  <div className="section-heading compact">
-                    <h3>Decoded outer Timelock calldata</h3>
-                  </div>
-                  <DecodedRows rows={decodedTimelockRows} />
-                </div>
-              ) : null}
-              {isTimelocked ? (
-                <div className="subpanel compact-panel">
-                  <div className="section-heading compact">
-                    <h3>Decoded inner business calldata</h3>
-                  </div>
-                  <DecodedRows rows={decodedInnerRows} />
-                </div>
-              ) : null}
-            </div>
+            <DisplayRows
+              rows={decodeResult.rows}
+              emptyText="Paste calldata to decode parameters."
+              onCopy={handleCopy}
+            />
           )}
         </section>
       </main>
@@ -696,58 +717,35 @@ const ParamField = ({
   );
 };
 
-const OutputCard = ({
-  title,
-  subtitle,
-  target,
-  calldata,
+const DisplayRows = ({
+  rows,
+  emptyText,
   onCopy,
 }: {
-  title: string;
-  subtitle: string;
-  target: string;
-  calldata: string;
+  rows: DisplayRow[];
+  emptyText: string;
   onCopy: (value: string, label: string) => Promise<void>;
-}) => (
-  <div className="output-card compact-output">
-    <div className="output-head">
-      <div>
-        <h4>{title}</h4>
-        <p>{subtitle}</p>
-      </div>
-    </div>
-    <div className="output-meta">
-      <span>Target</span>
-      <code>{target}</code>
-    </div>
-    <div className="output-meta">
-      <div className="meta-head">
-        <span>Calldata</span>
-        {calldata ? (
-          <button
-            type="button"
-            className="mini-button icon-button"
-            onClick={() => onCopy(calldata, "Calldata copied")}
-          >
-            <CopyIcon />
-            Copy
-          </button>
-        ) : null}
-      </div>
-      <pre>{calldata || "Fill the form and generate calldata."}</pre>
-    </div>
-  </div>
-);
-
-const DecodedRows = ({ rows }: { rows: Array<{ label: string; value: string }> }) => {
+}) => {
   if (rows.length === 0) {
-    return <p className="empty-state">Decoded parameters will appear here.</p>;
+    return <p className="empty-state">{emptyText}</p>;
   }
   return (
-    <div className="decoded-list">
-      {rows.map((row) => (
-        <div className="decoded-row" key={row.label}>
-          <span>{row.label}</span>
+    <div className="decoded-list safe-field-list">
+      {rows.map((row, index) => (
+        <div className="decoded-row safe-field-row" key={`${row.label}-${index}`}>
+          <div className="meta-head">
+            <span>{row.label}</span>
+            {row.copyable ? (
+              <button
+                type="button"
+                className="mini-button icon-button"
+                onClick={() => onCopy(row.value, `${row.label} copied`)}
+              >
+                <CopyIcon />
+                Copy
+              </button>
+            ) : null}
+          </div>
           <pre>{row.value}</pre>
         </div>
       ))}
@@ -756,27 +754,6 @@ const DecodedRows = ({ rows }: { rows: Array<{ label: string; value: string }> }
 };
 
 export default App;
-
-const CodeBlock = ({
-  title,
-  value,
-  onCopy,
-}: {
-  title: string;
-  value: string;
-  onCopy: (value: string, label: string) => Promise<void>;
-}) => (
-  <div className="code-block">
-    <div className="code-head">
-      <span>{title}</span>
-      <button type="button" className="mini-button icon-button" onClick={() => onCopy(value, `${title} copied`)}>
-        <CopyIcon />
-        Copy
-      </button>
-    </div>
-    <pre className="abi-box compact-box">{value}</pre>
-  </div>
-);
 
 const CopyIcon = () => (
   <svg

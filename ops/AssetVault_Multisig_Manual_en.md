@@ -8,14 +8,14 @@ This document is for production operators, signers, and reviewers. It covers:
 - How to fill transactions in the Safe web UI
 - Lark approval requirements
 
-`ADMIN_ROLE` and `UPGRADE_ROLE` must go through Timelock. Other privileged actions are direct Safe-to-`Vault Proxy` paths.
+`DEFAULT_ADMIN_ROLE`, `ADMIN_ROLE`, and `UPGRADE_ROLE` must go through Timelock. Other privileged actions are direct Safe-to-`Vault Proxy` paths.
 
 # Governance Structure
 
 Recommended setup:
 
 - `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `UPGRADE_ROLE`
-- `Governance Safe (4/7)` -> `DEFAULT_ADMIN_ROLE`
+- `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `DEFAULT_ADMIN_ROLE`
 - `Admin Safe (4/7)` -> `Admin Timelock (72h)` -> `ADMIN_ROLE`
 - `Token Safe (4/7)` -> `TOKEN_ROLE`
 - `Validator Safe (4/7)` -> `VALIDATOR_ROLE`
@@ -27,7 +27,7 @@ Key points:
 
 - Only `UPGRADE_ROLE` is used for contract upgrades, and it must be timelocked.
 - `ADMIN_ROLE` controls challenge period, rebalance receiver, and fee withdrawal, and it must also be timelocked.
-- `DEFAULT_ADMIN_ROLE` is not used for upgrades.
+- `DEFAULT_ADMIN_ROLE` is not used for upgrades, but it controls role grants and revokes and must go through Governance Timelock.
 - `TOKEN_ROLE`, `VALIDATOR_ROLE`, and `PAUSE_ROLE` are direct Safe-to-`Vault Proxy` paths.
 - For validator rotation, always `addValidators` first, confirm the new set works, then `removeValidators` the old set.
 
@@ -80,6 +80,7 @@ Key points:
 - All privileged production actions must go through a Lark approval process before Safe or Safe + Timelock execution.
 - Approval records should include at least: operation name, target chain, target contract, target function, parameters, business reason, risk notes, and transaction hash.
 - Timelocked actions should also record: `salt`, `schedule` transaction hash, and `execute` transaction hash.
+- If a scheduled operation must be cancelled, also record the cancelled Timelock `operation id` and the `cancel` transaction hash.
 - Each Lark approval record must map cleanly to the final on-chain transaction.
 
 # On-Chain Addresses
@@ -109,8 +110,8 @@ These must be filled in before the manual is distributed to operators:
 
 ## DEFAULT_ADMIN_ROLE
 
-- Holder: `Governance Safe`
-- Threshold: `4/7`
+- Holder: `Governance Timelock (72h)`
+- Upstream threshold: `Governance Safe 4/7`
 - Hash ID: `0x0000000000000000000000000000000000000000000000000000000000000000`
 - Responsibilities:
   - `grantRole(bytes32,address)`: grants a role to an address
@@ -184,14 +185,14 @@ This section only explains how to fill and verify transactions in the Safe web U
 
 - Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
 - Admin Timelock: `chains.arb1.roles.admin.timelock` in `ops/config/set-roles.json`
-- Governance Timelock: `chains.arb1.roles.upgrade.timelock` in `ops/config/set-roles.json`
-- Current Timelock delay: `259200` seconds
+- Governance Timelock: `chains.arb1.roles.defaultAdmin.timelock` and `chains.arb1.roles.upgrade.timelock` in `ops/config/set-roles.json`
+- Current Timelock delay: read each Timelock contract/config; demo config uses `259200` seconds.
 
 Important: Timelock addresses must come from the final values in `ops/config/set-roles.json`. If a Timelock field is still `0x0000000000000000000000000000000000000000`, that Timelock has not been deployed or written back yet, and the corresponding operation must not be submitted.
 
 ## How To Fill Direct Actions In Safe
 
-Applicable operations: `grantRole`, `revokeRole`, `addToken`, `updateToken`, `addValidators`, `updateValidatorRequiredPower`, `removeValidators`, `toggle`.
+Applicable operations: `addToken`, `updateToken`, `addValidators`, `updateValidatorRequiredPower`, `removeValidators`, `toggle`.
 
 1. Open the `Multisig Calldata Checker`, select the target chain and operation.
 2. Select `Encode` and fill parameters from the approved request.
@@ -206,7 +207,7 @@ Applicable operations: `grantRole`, `revokeRole`, `addToken`, `updateToken`, `ad
 
 ## How To Fill Timelocked Actions In Safe
 
-Applicable operations: `updatePendingWithdrawChallengePeriod`, `setRebalanceReceiver`, `withdrawFees`, `upgradeToAndCall`.
+Applicable operations: `grantRole`, `revokeRole`, `updatePendingWithdrawChallengePeriod`, `setRebalanceReceiver`, `withdrawFees`, `upgradeToAndCall`.
 
 Timelocked actions have two calldata layers:
 
@@ -254,13 +255,24 @@ Timelocked actions have two calldata layers:
 6. On the Safe `Review` page, copy `Data` and decode both outer and inner calldata in the checker.
 7. Sign only when the outer parameters match the scheduled operation and the inner business parameters are still correct.
 
+### Submit Cancel
+
+1. Select the corresponding Timelock operation in the checker and switch to `cancel`.
+2. The checker attempts to load currently pending operation ids from `CallScheduled` logs and filters them with `isOperationPending(id)`.
+3. If RPC log lookup fails, paste the `operation id` manually from the approval record or schedule transaction event.
+4. Safe `To` is the corresponding Timelock.
+5. Paste the `cancel` ABI JSON in Safe.
+6. Fill Safe parameters:
+   - `id`: Timelock operation id to cancel.
+
 ## Operation List And ABI JSON
 
 ### `grantRole(bytes32,address)`
 
 - Role: `DEFAULT_ADMIN_ROLE`
-- Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Path: Governance Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Governance Timelock
 - Parameters:
   - `role`: select from the checker dropdown; do not type the role hash manually.
   - `account`: address receiving the role.
@@ -273,8 +285,9 @@ Timelocked actions have two calldata layers:
 ### `revokeRole(bytes32,address)`
 
 - Role: `DEFAULT_ADMIN_ROLE`
-- Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Path: Governance Timelock
+- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Governance Timelock
 - Parameters:
   - `role`: select from the checker dropdown; do not type the role hash manually.
   - `account`: address losing the role.
@@ -440,6 +453,12 @@ Timelocked actions have two calldata layers:
 
 ```json
 [{"inputs":[{"internalType":"address","name":"target","type":"address"},{"internalType":"uint256","name":"value","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"},{"internalType":"bytes32","name":"predecessor","type":"bytes32"},{"internalType":"bytes32","name":"salt","type":"bytes32"}],"name":"execute","outputs":[],"stateMutability":"payable","type":"function"}]
+```
+
+### `cancel(bytes32)`
+
+```json
+[{"inputs":[{"internalType":"bytes32","name":"id","type":"bytes32"}],"name":"cancel","outputs":[],"stateMutability":"nonpayable","type":"function"}]
 ```
 
 ## Supported Actions

@@ -19,7 +19,7 @@ import {AssetVault} from "../src/AssetVault.sol";
 //    SET_ROLES_CONFIG_PATH=/abs/path/to/set-roles.json forge script ...
 //
 // Notes:
-// - `ADMIN_ROLE` and `UPGRADE_ROLE` are expected to be timelock-backed.
+// - `DEFAULT_ADMIN_ROLE`, `ADMIN_ROLE`, and `UPGRADE_ROLE` are expected to be timelock-backed.
 // - Existing timelock delay mismatches are treated as blockers, because OZ timelock delay can only be updated
 //   by the timelock itself through a scheduled self-call.
 contract SetRoles is Script {
