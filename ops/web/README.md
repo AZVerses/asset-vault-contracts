@@ -4,7 +4,7 @@ Static React tool for production operators.
 
 It supports:
 
-- per-chain fixed `Vault Proxy`, `Admin Timelock`, and `Governance Timelock` targets
+- per-chain fixed `Vault Proxy`, `Admin Timelock`, `Governance Timelock`, and `Upgrade Timelock` targets
 - whitelisted multisig operations only
 - ABI JSON display for each operation
 - calldata encode for direct Safe actions
@@ -32,4 +32,6 @@ npm run build
 - Build command: `npm run build`
 - Output directory: `dist`
 
-Current timelock addresses in the app are placeholders and must be replaced after deployment.
+Arbitrum One is configured with the deployed production Vault Proxy and three
+72-hour Timelocks. Arbitrum Sepolia and Ethereum Sepolia remain placeholder
+configurations until those deployments are completed.

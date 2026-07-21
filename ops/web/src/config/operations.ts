@@ -25,7 +25,7 @@ export type OperationDef = {
   label: string;
   role: string;
   mode: "direct" | "timelock";
-  timelockType?: "admin" | "governance";
+  timelockType?: "admin" | "governance" | "upgrade";
   description: string;
   functionName: string;
   functionSignature: string;
@@ -113,8 +113,8 @@ export const operations: OperationDef[] = [
     label: "upgradeToAndCall",
     role: "UPGRADE_ROLE",
     mode: "timelock",
-    timelockType: "governance",
-    description: "Upgrade the Vault Proxy implementation through Governance Timelock.",
+    timelockType: "upgrade",
+    description: "Upgrade the Vault Proxy implementation through Upgrade Timelock.",
     functionName: "upgradeToAndCall",
     functionSignature: "upgradeToAndCall(address,bytes)",
     abiJson: abi(

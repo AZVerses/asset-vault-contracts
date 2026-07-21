@@ -14,8 +14,8 @@
 
 当前建议的治理拆分如下：
 
-- `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `UPGRADE_ROLE`
 - `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `DEFAULT_ADMIN_ROLE`
+- `Governance Safe (4/7)` -> `Upgrade Timelock (72h)` -> `UPGRADE_ROLE`
 - `Admin Safe (4/7)` -> `Admin Timelock (72h)` -> `ADMIN_ROLE`
 - `Token Safe (4/7)` -> `TOKEN_ROLE`
 - `Validator Safe (4/7)` -> `VALIDATOR_ROLE`
@@ -52,7 +52,7 @@
 - 检查浏览器地址栏证书是否正常，避免在仿冒站点签名。
 - 检查当前连接的钱包是不是本次应使用的硬件钱包。
 - 检查 Safe 页面左上角展示的链和 Safe 地址，确认不是测试网、不是其他 Safe。
-- 检查 `To` 地址到底是 `Vault Proxy`、`Admin Timelock` 还是 `Governance Timelock`，不要填反。
+- 检查 `To` 地址到底是 `Vault Proxy`、`Admin Timelock`、`Governance Timelock` 还是 `Upgrade Timelock`，不要填反。
 - 对于新的 receiver / treasury / validator / implementation 地址，至少做两种独立来源核验：
   - 官方官网、官方文档、官方 GitHub、官方公告
   - 区块浏览器已验证合约页面
@@ -88,7 +88,7 @@
 ## Vault Proxy
 
 - Arbitrum One `42161`
-  - Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+  - Vault Proxy: `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Arbitrum Sepolia `421614`
   - Vault Proxy: `0xf2137a2d64ba4dafcab54959862f7384ed7be100`
 - Ethereum Sepolia `11155111`
@@ -96,15 +96,13 @@
 
 ## Safe / Timelock 地址
 
-以下地址在正式下发给运营前必须补齐：
+Arbitrum One 当前已部署并验证的地址：
 
-- `Governance Safe`
-- `Governance Timelock`
-- `Admin Safe`
-- `Admin Timelock`
-- `Token Safe`
-- `Validator Safe`
-- `Emergency Guardian Safe`
+- `Role Safe / Governance Safe / Admin Safe`: `0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a`
+- `Governance Timelock` (`DEFAULT_ADMIN_ROLE`): `0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6`
+- `Admin Timelock` (`ADMIN_ROLE`): `0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495`
+- `Upgrade Timelock` (`UPGRADE_ROLE`): `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
+- All Timelock delays: `259200` seconds (72 hours)
 
 # Roles
 
@@ -119,7 +117,7 @@
 
 ## UPGRADE_ROLE
 
-- Holder: `Governance Timelock (72h)`
+- Holder: `Upgrade Timelock (72h)`
 - Upstream signer threshold: `Governance Safe 4/7`
 - Hash ID: `0x88aa719609f728b0c5e7fb8dd3608d5c25d497efbb3b9dd64e9251ebba101508`
 - Responsibilities:
@@ -183,10 +181,11 @@
 
 ## Arbitrum One Target 地址
 
-- Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
-- Admin Timelock: `ops/config/set-roles.json` 的 `chains.arb1.roles.admin.timelock`
-- Governance Timelock: `ops/config/set-roles.json` 的 `chains.arb1.roles.defaultAdmin.timelock` 和 `chains.arb1.roles.upgrade.timelock`
-- 当前 Timelock delay: 以各 Timelock 合约配置为准；demo 配置为 `259200` 秒。
+- Vault Proxy: `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
+- Governance Timelock: `0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6`
+- Admin Timelock: `0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495`
+- Upgrade Timelock: `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
+- 当前各 Timelock delay: `259200` 秒（72 小时）。
 
 注意：Timelock 地址必须以 `ops/config/set-roles.json` 中的最终值为准。如果该字段仍为 `0x0000000000000000000000000000000000000000`，说明该 Timelock 尚未完成部署或配置写回，不能发起对应操作。
 
@@ -198,7 +197,7 @@
 2. 选择 `Encode`，按审批单填写参数。
 3. 复制工具展示的 `ABI JSON`。
 4. 打开 Safe `Transaction Builder`。
-5. `To` 填 `Vault Proxy`：`0xAB3D96237328385f8988166c6d7788a63f48dDa6`。
+5. `To` 填 `Vault Proxy`：`0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`。
 6. 粘贴对应操作的 `ABI JSON`，选择同名函数。
 7. 在 Safe 中填写和 checker 完全相同的参数。
 8. 进入 Safe `Review` 页面，复制 Safe 展示的 `Data`。
@@ -218,7 +217,7 @@ Timelock 操作有两层 calldata：
 
 1. 打开 checker，选择目标链和业务操作。
 2. 选择 `Encode`，按审批单填写业务参数。
-3. 确认 checker 展示的 inner target 是 `Vault Proxy`：`0xAB3D96237328385f8988166c6d7788a63f48dDa6`。
+3. 确认 checker 展示的 inner target 是 `Vault Proxy`：`0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`。
 4. 复制生成出的 inner calldata。
 5. 用 checker 的 `Decode` 模式粘贴 inner calldata，确认业务函数和参数正确。
 
@@ -227,7 +226,7 @@ Timelock 操作有两层 calldata：
 1. 在 checker 中继续生成 Timelock `schedule` calldata。
 2. Timelock target 按操作类型填写：
    - `ADMIN_ROLE` 操作的 Safe `To` 填 Admin Timelock。
-   - `UPGRADE_ROLE` 操作的 Safe `To` 填 Governance Timelock。
+   - `UPGRADE_ROLE` 操作的 Safe `To` 填 Upgrade Timelock。
 3. Safe `ABI JSON` 粘贴 `schedule` ABI。
 4. Safe 函数选择 `schedule(address,uint256,bytes,bytes32,bytes32,uint256)`。
 5. Safe 参数填写：
@@ -271,7 +270,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `DEFAULT_ADMIN_ROLE`
 - Path: Governance Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Governance Timelock
 - 参数：
   - `role`: 使用 checker 下拉选择，不要手输 role hash。
@@ -286,7 +285,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `DEFAULT_ADMIN_ROLE`
 - Path: Governance Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Governance Timelock
 - 参数：
   - `role`: 使用 checker 下拉选择，不要手输 role hash。
@@ -300,9 +299,9 @@ Timelock 操作有两层 calldata：
 ### `upgradeToAndCall(address,bytes)`
 
 - Role: `UPGRADE_ROLE`
-- Path: Governance Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
-- Safe `To`: Governance Timelock
+- Path: Upgrade Timelock
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
+- Safe `To`: Upgrade Timelock
 - 参数：
   - `newImplementation`: 新 implementation 地址。
   - `data`: 升级后需要执行的迁移或初始化 calldata；没有则填 `0x`。
@@ -316,7 +315,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `ADMIN_ROLE`
 - Path: Admin Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Admin Timelock
 - 参数：
   - `newValue`: 新挑战期秒数。
@@ -330,7 +329,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `ADMIN_ROLE`
 - Path: Admin Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Admin Timelock
 - 参数：
   - `newReceiver`: `rebalanceWithdraw` 固定收款地址。
@@ -344,7 +343,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `ADMIN_ROLE`
 - Path: Admin Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Admin Timelock
 - 参数：
   - `tokens`: 要提取手续费的 token 地址列表；原生币使用 `0x0000000000000000000000000000000000000000`。
@@ -359,7 +358,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `TOKEN_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - 参数：
   - `token`: token 地址。
   - `hardCapRatioBps`: 快提硬上限比例，单位 bps。
@@ -374,7 +373,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `TOKEN_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - 参数：
   - `token`: token 地址。
   - `hardCapRatioBps`: 新快提硬上限比例，单位 bps。
@@ -389,7 +388,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `VALIDATOR_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - 参数：
   - `validators`: validator 列表，每项包含 `signer` 和 `power`。
   - `requiredPower`: 该 validator 集合通过校验所需最小 power。
@@ -404,7 +403,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `VALIDATOR_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - 参数：
   - `validators`: 已存在的 validator 集合，必须与链上集合一致。
   - `newRequiredPower`: 新的最小 required power。
@@ -418,7 +417,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `VALIDATOR_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - 参数：
   - `validators`: 要删除的 validator 集合。
 - 轮换用法：不要把本调用作为单独的轮换交易提交。它必须作为同一笔 Safe batch 交易的第二个调用，排在 `addValidators(newSet, newRequiredPower)` 之后。
@@ -432,7 +431,7 @@ Timelock 操作有两层 calldata：
 
 - Role: `PAUSE_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - 参数：
   - `pause`: `true` 表示暂停，`false` 表示恢复。
 - ABI JSON:
@@ -487,7 +486,7 @@ Timelock 操作有两层 calldata：
 ### upgradeToAndCall
 
 - Required Role: `UPGRADE_ROLE`
-- Path: `Governance Safe -> Governance Timelock -> Vault Proxy`
+- Path: `Governance Safe -> Upgrade Timelock -> Vault Proxy`
 - Parameters:
   - `newImplementation`: 新 implementation 地址
   - `data`: 升级后要附带执行的初始化或迁移 calldata；没有就填 `0x`

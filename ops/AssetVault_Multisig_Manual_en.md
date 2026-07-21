@@ -14,8 +14,8 @@ This document is for production operators, signers, and reviewers. It covers:
 
 Recommended setup:
 
-- `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `UPGRADE_ROLE`
 - `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `DEFAULT_ADMIN_ROLE`
+- `Governance Safe (4/7)` -> `Upgrade Timelock (72h)` -> `UPGRADE_ROLE`
 - `Admin Safe (4/7)` -> `Admin Timelock (72h)` -> `ADMIN_ROLE`
 - `Token Safe (4/7)` -> `TOKEN_ROLE`
 - `Validator Safe (4/7)` -> `VALIDATOR_ROLE`
@@ -52,7 +52,7 @@ Key points:
 - Check the browser certificate and avoid signing on lookalike sites.
 - Confirm the connected wallet is the intended hardware wallet.
 - Confirm the chain and Safe address shown in the Safe UI are correct.
-- Confirm whether `To` should be `Vault Proxy`, `Admin Timelock`, or `Governance Timelock`.
+- Confirm whether `To` should be `Vault Proxy`, `Admin Timelock`, `Governance Timelock`, or `Upgrade Timelock`.
 - For any new receiver / treasury / validator / implementation address, verify from at least two independent sources:
   - Official website, docs, GitHub, or announcement
   - Verified contract page on a block explorer
@@ -88,7 +88,7 @@ Key points:
 ## Vault Proxy
 
 - Arbitrum One `42161`
-  - Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+  - Vault Proxy: `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Arbitrum Sepolia `421614`
   - Vault Proxy: `0xf2137a2d64ba4dafcab54959862f7384ed7be100`
 - Ethereum Sepolia `11155111`
@@ -96,15 +96,13 @@ Key points:
 
 ## Safe / Timelock Addresses
 
-These must be filled in before the manual is distributed to operators:
+Current deployed and verified Arbitrum One addresses:
 
-- `Governance Safe`
-- `Governance Timelock`
-- `Admin Safe`
-- `Admin Timelock`
-- `Token Safe`
-- `Validator Safe`
-- `Emergency Guardian Safe`
+- `Role Safe / Governance Safe / Admin Safe`: `0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a`
+- `Governance Timelock` (`DEFAULT_ADMIN_ROLE`): `0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6`
+- `Admin Timelock` (`ADMIN_ROLE`): `0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495`
+- `Upgrade Timelock` (`UPGRADE_ROLE`): `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
+- All Timelock delays: `259200` seconds (72 hours)
 
 # Roles
 
@@ -119,7 +117,7 @@ These must be filled in before the manual is distributed to operators:
 
 ## UPGRADE_ROLE
 
-- Holder: `Governance Timelock (72h)`
+- Holder: `Upgrade Timelock (72h)`
 - Upstream threshold: `Governance Safe 4/7`
 - Hash ID: `0x88aa719609f728b0c5e7fb8dd3608d5c25d497efbb3b9dd64e9251ebba101508`
 - Responsibilities:
@@ -183,10 +181,11 @@ This section only explains how to fill and verify transactions in the Safe web U
 
 ## Arbitrum One Target Addresses
 
-- Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
-- Admin Timelock: `chains.arb1.roles.admin.timelock` in `ops/config/set-roles.json`
-- Governance Timelock: `chains.arb1.roles.defaultAdmin.timelock` and `chains.arb1.roles.upgrade.timelock` in `ops/config/set-roles.json`
-- Current Timelock delay: read each Timelock contract/config; demo config uses `259200` seconds.
+- Vault Proxy: `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
+- Governance Timelock: `0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6`
+- Admin Timelock: `0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495`
+- Upgrade Timelock: `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
+- Current delay for each Timelock: `259200` seconds (72 hours).
 
 Important: Timelock addresses must come from the final values in `ops/config/set-roles.json`. If a Timelock field is still `0x0000000000000000000000000000000000000000`, that Timelock has not been deployed or written back yet, and the corresponding operation must not be submitted.
 
@@ -198,7 +197,7 @@ Applicable operations: `addToken`, `updateToken`, `addValidators`, `updateValida
 2. Select `Encode` and fill parameters from the approved request.
 3. Copy the `ABI JSON` shown by the checker.
 4. Open Safe `Transaction Builder`.
-5. Set `To` to the Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`.
+5. Set `To` to the Vault Proxy: `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`.
 6. Paste the operation `ABI JSON` and select the matching function.
 7. Fill the exact same parameters in Safe.
 8. On the Safe `Review` page, copy the generated `Data`.
@@ -218,7 +217,7 @@ Timelocked actions have two calldata layers:
 
 1. Open the checker, select the target chain and business operation.
 2. Select `Encode` and fill business parameters from the approved request.
-3. Confirm the inner target is the Vault Proxy: `0xAB3D96237328385f8988166c6d7788a63f48dDa6`.
+3. Confirm the inner target is the Vault Proxy: `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`.
 4. Copy the generated inner calldata.
 5. Use checker `Decode` on the inner calldata and confirm the business function and parameters.
 
@@ -227,7 +226,7 @@ Timelocked actions have two calldata layers:
 1. Continue in the checker and generate Timelock `schedule` calldata.
 2. Set Safe `To` based on the operation type:
    - `ADMIN_ROLE` operations use Admin Timelock.
-   - `UPGRADE_ROLE` operations use Governance Timelock.
+   - `UPGRADE_ROLE` operations use Upgrade Timelock.
 3. Paste the `schedule` ABI JSON in Safe.
 4. Select `schedule(address,uint256,bytes,bytes32,bytes32,uint256)`.
 5. Fill Safe parameters:
@@ -271,7 +270,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `DEFAULT_ADMIN_ROLE`
 - Path: Governance Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Governance Timelock
 - Parameters:
   - `role`: select from the checker dropdown; do not type the role hash manually.
@@ -286,7 +285,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `DEFAULT_ADMIN_ROLE`
 - Path: Governance Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Governance Timelock
 - Parameters:
   - `role`: select from the checker dropdown; do not type the role hash manually.
@@ -300,9 +299,9 @@ Timelocked actions have two calldata layers:
 ### `upgradeToAndCall(address,bytes)`
 
 - Role: `UPGRADE_ROLE`
-- Path: Governance Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
-- Safe `To`: Governance Timelock
+- Path: Upgrade Timelock
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
+- Safe `To`: Upgrade Timelock
 - Parameters:
   - `newImplementation`: new implementation address.
   - `data`: migration or initialization calldata; use `0x` if none is required.
@@ -316,7 +315,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `ADMIN_ROLE`
 - Path: Admin Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Admin Timelock
 - Parameters:
   - `newValue`: new challenge period in seconds.
@@ -330,7 +329,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `ADMIN_ROLE`
 - Path: Admin Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Admin Timelock
 - Parameters:
   - `newReceiver`: fixed receiver used by `rebalanceWithdraw`.
@@ -344,7 +343,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `ADMIN_ROLE`
 - Path: Admin Timelock
-- Inner target: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Inner target: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Safe `To`: Admin Timelock
 - Parameters:
   - `tokens`: token addresses to withdraw fees for; use `0x0000000000000000000000000000000000000000` for native token.
@@ -359,7 +358,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `TOKEN_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Parameters:
   - `token`: token address.
   - `hardCapRatioBps`: hard cap ratio in bps.
@@ -374,7 +373,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `TOKEN_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Parameters:
   - `token`: token address.
   - `hardCapRatioBps`: new hard cap ratio in bps.
@@ -389,7 +388,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `VALIDATOR_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Parameters:
   - `validators`: validator list; each item has `signer` and `power`.
   - `requiredPower`: minimum power required for this validator set.
@@ -404,7 +403,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `VALIDATOR_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Parameters:
   - `validators`: existing validator set; must match the on-chain set.
   - `newRequiredPower`: new minimum required power.
@@ -418,7 +417,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `VALIDATOR_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Parameters:
   - `validators`: validator set to remove.
 - Rotation usage: do not submit this as a standalone rotation transaction. It must be the second call in the same Safe batch transaction after `addValidators(newSet, newRequiredPower)`.
@@ -432,7 +431,7 @@ Timelocked actions have two calldata layers:
 
 - Role: `PAUSE_ROLE`
 - Path: Direct
-- Safe `To`: Vault Proxy `0xAB3D96237328385f8988166c6d7788a63f48dDa6`
+- Safe `To`: Vault Proxy `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Parameters:
   - `pause`: `true` pauses the vault, `false` unpauses it.
 - ABI JSON:
@@ -487,7 +486,7 @@ Timelocked actions have two calldata layers:
 ### upgradeToAndCall
 
 - Required Role: `UPGRADE_ROLE`
-- Path: `Governance Safe -> Governance Timelock -> Vault Proxy`
+- Path: `Governance Safe -> Upgrade Timelock -> Vault Proxy`
 - Parameters:
   - `newImplementation`: new implementation address
   - `data`: migration or initialization calldata, or `0x`

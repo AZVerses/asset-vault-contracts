@@ -76,6 +76,16 @@ const timelockAbiForAction = (action: TimelockMode) => {
   return timelockAbis.cancel;
 };
 
+const timelockForType = (chain: (typeof chains)[number], type: OperationDef["timelockType"]) => {
+  if (type === "admin") {
+    return chain.adminTimelock;
+  }
+  if (type === "upgrade") {
+    return chain.upgradeTimelock;
+  }
+  return chain.governanceTimelock;
+};
+
 const App = () => {
   const [chainId, setChainId] = useState(chains[0].id);
   const [operationId, setOperationId] = useState(operations[0].id);
@@ -95,8 +105,7 @@ const App = () => {
     [operationId],
   );
   const isTimelocked = operation.mode === "timelock";
-  const activeTimelock =
-    operation.timelockType === "admin" ? chain.adminTimelock : chain.governanceTimelock;
+  const activeTimelock = timelockForType(chain, operation.timelockType);
   const timelockTarget = activeTimelock.address;
   const timelockBadge = isTimelocked
     ? `timelock:${Math.round(activeTimelock.delaySeconds / 3600)}h`
@@ -105,8 +114,7 @@ const App = () => {
     if (item.mode === "direct") {
       return "direct";
     }
-    const itemTimelock =
-      item.timelockType === "admin" ? chain.adminTimelock : chain.governanceTimelock;
+    const itemTimelock = timelockForType(chain, item.timelockType);
     return `timelock:${Math.round(itemTimelock.delaySeconds / 3600)}h`;
   };
 
@@ -389,6 +397,10 @@ const App = () => {
               <p>
                 <span>governance timelock:</span>
                 <code>{chain.governanceTimelock.address}</code>
+              </p>
+              <p>
+                <span>upgrade timelock:</span>
+                <code>{chain.upgradeTimelock.address}</code>
               </p>
               <small>{chain.addressNote}</small>
             </div>

@@ -5,6 +5,7 @@ export type ChainConfig = {
   vaultProxy: string;
   adminTimelock: TimelockConfig;
   governanceTimelock: TimelockConfig;
+  upgradeTimelock: TimelockConfig;
   addressNote: string;
 };
 
@@ -21,16 +22,20 @@ export const chains: ChainConfig[] = [
     id: "arb1",
     name: "Arbitrum One",
     chainId: 42161,
-    vaultProxy: "0xAB3D96237328385f8988166c6d7788a63f48dDa6",
+    vaultProxy: "0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE",
     adminTimelock: {
-      address: "0x1111111111111111111111111111111111111111",
+      address: "0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495",
       delaySeconds: 259200,
     },
     governanceTimelock: {
-      address: "0x4444444444444444444444444444444444444444",
+      address: "0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6",
       delaySeconds: 259200,
     },
-    addressNote: "Placeholder Timelock addresses. Replace after deployment.",
+    upgradeTimelock: {
+      address: "0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c",
+      delaySeconds: 259200,
+    },
+    addressNote: "Arbitrum One production addresses; all Timelocks use a 72h delay.",
   },
   {
     id: "arb-sepolia",
@@ -43,6 +48,10 @@ export const chains: ChainConfig[] = [
     },
     governanceTimelock: {
       address: "0x5555555555555555555555555555555555555555",
+      delaySeconds: 259200,
+    },
+    upgradeTimelock: {
+      address: "0x7777777777777777777777777777777777777777",
       delaySeconds: 259200,
     },
     addressNote: "Placeholder Timelock addresses. Replace after deployment.",
@@ -58,6 +67,10 @@ export const chains: ChainConfig[] = [
     },
     governanceTimelock: {
       address: "0x6666666666666666666666666666666666666666",
+      delaySeconds: 259200,
+    },
+    upgradeTimelock: {
+      address: "0x8888888888888888888888888888888888888888",
       delaySeconds: 259200,
     },
     addressNote: "Placeholder Timelock addresses. Replace after deployment.",
