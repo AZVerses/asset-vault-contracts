@@ -39,6 +39,8 @@ Configuration files:
   `AssetVault` does not expose an enumerable current validator set.
 - `scripts/configs/roles.json`: local role name/hash, direct holders, and optional
   timelock settings. `roleHashL` is accepted as a compatibility alias for `roleHash`.
+  Set `skip: true` on an item to leave that role completely unchanged; omitted `skip`
+  defaults to `false`.
 
 The real JSON files are ignored by git. Copy the templates before configuring a
 deployment:

@@ -23,6 +23,7 @@ contract SetupAdminRoles is Script {
         string roleName;
         bytes32 roleHash;
         address[] roles;
+        bool skip;
         bool isTimelock;
         uint256 timelockDelay;
         address timelockProposer;
@@ -41,6 +42,10 @@ contract SetupAdminRoles is Script {
         vm.startBroadcast(privateKey);
         for (uint256 i = 0; i < count; ++i) {
             RoleConfig memory config = _readRole(json, i);
+            if (config.skip) {
+                console.log("Skipped role config:", config.roleName);
+                continue;
+            }
             _validateRoleConfig(config);
             _setupRole(vault, config, caller);
         }
@@ -104,6 +109,8 @@ contract SetupAdminRoles is Script {
     function _readRole(string memory json, uint256 index) internal view returns (RoleConfig memory config) {
         string memory base = string.concat(".[", vm.toString(index), "]");
         config.roleName = vm.parseJsonString(json, string.concat(base, ".roleName"));
+        config.skip = _readBoolOr(json, string.concat(base, ".skip"), false);
+        if (config.skip) return config;
         string memory hashPath = string.concat(base, ".roleHash");
         if (!vm.keyExistsJson(json, hashPath)) hashPath = string.concat(base, ".roleHashL");
         config.roleHash = vm.keyExistsJson(json, hashPath) ? vm.parseJsonBytes32(json, hashPath) : bytes32(0);
@@ -144,6 +151,10 @@ contract SetupAdminRoles is Script {
 
     function _readUintOr(string memory json, string memory path, uint256 defaultValue) internal view returns (uint256) {
         return vm.keyExistsJson(json, path) ? vm.parseJsonUint(json, path) : defaultValue;
+    }
+
+    function _readBoolOr(string memory json, string memory path, bool defaultValue) internal view returns (bool) {
+        return vm.keyExistsJson(json, path) ? vm.parseJsonBool(json, path) : defaultValue;
     }
 
     function _readAddressOr(string memory json, string memory path, address defaultValue)
