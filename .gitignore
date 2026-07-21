@@ -17,5 +17,10 @@ node_modules/
 .vscode/
 
 # Local deployment and helper scripts
-scripts/
+scripts/configs/*.json
+!scripts/configs/*.example.json
 deployments/
+
+dist
+
+.vercel

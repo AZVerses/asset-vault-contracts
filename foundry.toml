@@ -4,7 +4,10 @@ out = "out"
 libs = ["lib"]
 optimizer = true
 optimizer_runs = 200
-fs_permissions = [{ access = "read-write", path = "./ops/config" }]
+fs_permissions = [
+    { access = "read-write", path = "./ops/config" },
+    { access = "read", path = "./scripts/configs" }
+]
 
 
 remappings = [

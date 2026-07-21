@@ -11,6 +11,55 @@ It serves four purposes:
 - split withdrawals into a fast path and a slow path
 - provide explicit operational controls for pausing, flushing, rebalance payout control, and upgrade
 
+## Scripts
+
+The setup entrypoints are intentionally split by responsibility. All scripts require
+`AZ_DEPLOYER_PRIVATE_KEY`; setup scripts also require `VAULT_ADDRESS`. The RPC URL is
+passed to Foundry with `--rpc-url`.
+
+```bash
+forge script scripts/DeployAssetVault.s.sol:DeployAssetVault --rpc-url "$RPC_URL" --broadcast
+forge script scripts/SetupOperators.s.sol:SetupOperators --rpc-url "$RPC_URL" --broadcast
+forge script scripts/SetupTokens.s.sol:SetupTokens --rpc-url "$RPC_URL" --broadcast
+forge script scripts/SetupValidators.s.sol:SetupValidators --rpc-url "$RPC_URL" --broadcast
+forge script scripts/SetupAdminRoles.s.sol:SetupAdminRoles --rpc-url "$RPC_URL" --broadcast
+```
+
+`DeployAssetVault` uses `CHALLENGE_PERIOD` when provided and defaults to one day.
+The other retained utilities are `UpgradeAssetVault`, `generateTypes.ts`, and
+`calculateBytecodeSize.ts`.
+
+Configuration files:
+
+- `scripts/configs/tokens.json`: local ERC-20/native token address, metadata expectations,
+  hard-cap ratio, and refill rate. Existing tokens are updated; missing tokens are added.
+- `scripts/configs/operators.json`: local operator addresses. Existing grants are skipped.
+- `scripts/configs/validators.json`: local desired sorted validator set and required power.
+  Old sets are removed only when explicitly listed under `removeValidatorSets` because
+  `AssetVault` does not expose an enumerable current validator set.
+- `scripts/configs/roles.json`: local role name/hash, direct holders, and optional
+  timelock settings. `roleHashL` is accepted as a compatibility alias for `roleHash`.
+
+The real JSON files are ignored by git. Copy the templates before configuring a
+deployment:
+
+```bash
+cp scripts/configs/tokens.example.json scripts/configs/tokens.json
+cp scripts/configs/operators.example.json scripts/configs/operators.json
+cp scripts/configs/validators.example.json scripts/configs/validators.json
+cp scripts/configs/roles.example.json scripts/configs/roles.json
+```
+
+The example addresses are placeholders and must be replaced before broadcasting.
+
+For a timelocked role, `roles` are proposer candidates and the vault role is granted to
+the `TimelockController`; proposer defaults to the first entry, canceller defaults to
+the proposer, and executor defaults to the current setup caller. An existing
+`timelockAddress` must use the configured delay; a zero address causes a new controller
+to be deployed and its emitted address must be written back to the JSON before rerunning.
+The controller follows OpenZeppelin Contracts v5.6.1 `TimelockController` semantics:
+<https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/TimelockController.sol>.
+
 The contract is UUPS-upgradeable and built around role-based access control plus validator quorum verification.
 
 ## Signature And Nonce Rules
@@ -100,6 +149,11 @@ Each supported token has:
 `usedWithdrawHotAmount` tracks how much fast-withdraw capacity has been consumed.
 
 Over time, that usage decays according to `refillRateMps`. This is what allows fast withdrawals to recover capacity without manual intervention.
+
+The contract applies `hardCap * refillRateMps * elapsedSeconds / 1_000_000`.
+For recovery within 24 hours, `ceil(1_000_000 / 86_400) = 12` is used in
+`scripts/configs/tokens.json`; this reaches 100% in about 83,334 seconds rather
+than exactly 86,400 seconds because the rate is an integer.
 
 ## Fast Queue And Slow Queue
 

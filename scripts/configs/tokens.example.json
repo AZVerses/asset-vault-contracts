@@ -1,0 +1,20 @@
+[
+  {
+    "token": "0x1111111111111111111111111111111111111111",
+    "label": "EXAMPLE_TOKEN",
+    "expectedName": "Example Token",
+    "expectedSymbol": "EXAMPLE",
+    "expectedDecimals": 18,
+    "hardCapRatioBps": 10000,
+    "refillRateMps": 12
+  },
+  {
+    "token": "0x0000000000000000000000000000000000000000",
+    "label": "ETH",
+    "expectedName": "Native ETH",
+    "expectedSymbol": "ETH",
+    "expectedDecimals": 18,
+    "hardCapRatioBps": 10000,
+    "refillRateMps": 12
+  }
+]

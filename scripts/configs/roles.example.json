@@ -1,0 +1,22 @@
+[
+  {
+    "roleName": "ADMIN_ROLE",
+    "roleHash": "0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775",
+    "roles": [
+      "0x0000000000000000000000000000000000000001"
+    ],
+    "isTimelock": false
+  },
+  {
+    "roleName": "UPGRADE_ROLE",
+    "roleHash": "0x88aa719609f728b0c5e7fb8dd3608d5c25d497efbb3b9dd64e9251ebba101508",
+    "roles": [
+      "0x0000000000000000000000000000000000000001"
+    ],
+    "isTimelock": true,
+    "timelockDelay": 86400,
+    "timelockProposer": "0x0000000000000000000000000000000000000001",
+    "timelockExecutor": "0x0000000000000000000000000000000000000001",
+    "timelockAddress": "0x0000000000000000000000000000000000000000"
+  }
+]
