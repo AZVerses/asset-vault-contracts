@@ -19,6 +19,8 @@ node_modules/
 # Local deployment and helper scripts
 scripts/configs/*.json
 !scripts/configs/*.example.json
+ops/config/*.json
+!ops/config/*.example.json
 deployments/
 
 dist
