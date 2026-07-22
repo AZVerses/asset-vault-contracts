@@ -16,7 +16,7 @@
 
 - `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `DEFAULT_ADMIN_ROLE`
 - `Governance Safe (4/7)` -> `Upgrade Timelock (72h)` -> `UPGRADE_ROLE`
-- `Admin Safe (4/7)` -> `Admin Timelock (72h)` -> `ADMIN_ROLE`
+- `Admin Safe (4/7)` -> `Admin Timelock (1800s / 30m)` -> `ADMIN_ROLE`
 - `Token Safe (4/7)` -> `TOKEN_ROLE`
 - `Validator Safe (4/7)` -> `VALIDATOR_ROLE`
 - `Emergency Guardian Safe (3/5)` -> `PAUSE_ROLE`
@@ -100,9 +100,9 @@ Arbitrum One 当前已部署并验证的地址：
 
 - `Role Safe / Governance Safe / Admin Safe`: `0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a`
 - `Governance Timelock` (`DEFAULT_ADMIN_ROLE`): `0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6`
-- `Admin Timelock` (`ADMIN_ROLE`): `0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495`
+- `Admin Timelock` (`ADMIN_ROLE`): `0x7A1b6891269Ed1699F93e25296a6e23d6f4F7386`
 - `Upgrade Timelock` (`UPGRADE_ROLE`): `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
-- All Timelock delays: `259200` seconds (72 hours)
+- Timelock delays: Admin `1800` seconds (30 minutes); Governance/Upgrade `259200` seconds (72 hours)
 
 # Roles
 
@@ -125,7 +125,7 @@ Arbitrum One 当前已部署并验证的地址：
 
 ## ADMIN_ROLE
 
-- Holder: `Admin Timelock (72h)`
+- Holder: `Admin Timelock (1800s / 30m)`
 - Upstream signer threshold: `Admin Safe 4/7`
 - Hash ID: `0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775`
 - Responsibilities:
@@ -183,9 +183,9 @@ Arbitrum One 当前已部署并验证的地址：
 
 - Vault Proxy: `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Governance Timelock: `0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6`
-- Admin Timelock: `0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495`
+- Admin Timelock: `0x7A1b6891269Ed1699F93e25296a6e23d6f4F7386`
 - Upgrade Timelock: `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
-- 当前各 Timelock delay: `259200` 秒（72 小时）。
+- 当前 Timelock delay：Admin 为 `1800` 秒（30 分钟）；Governance/Upgrade 为 `259200` 秒（72 小时）。
 
 注意：Timelock 地址必须以 `ops/config/set-roles.json` 中的最终值为准。如果该字段仍为 `0x0000000000000000000000000000000000000000`，说明该 Timelock 尚未完成部署或配置写回，不能发起对应操作。
 
@@ -235,7 +235,7 @@ Timelock 操作有两层 calldata：
    - `data`: inner calldata
    - `predecessor`: 无前置依赖时填 `0x0000000000000000000000000000000000000000000000000000000000000000`
    - `salt`: Lark 审批记录里的 `bytes32` salt
-   - `delay`: `259200`
+   - `delay`: `1800` for `ADMIN_ROLE`; `259200` for `DEFAULT_ADMIN_ROLE` and `UPGRADE_ROLE`
 6. Safe `Review` 页面复制 `Data`，用 checker `Decode` 解出 outer calldata。
 7. 核对 outer `target` 是 Vault Proxy，outer `data` 完全等于 inner calldata，`salt` 和 `delay` 与审批记录一致。
 

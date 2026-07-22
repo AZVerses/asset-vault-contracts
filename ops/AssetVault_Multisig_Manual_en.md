@@ -16,7 +16,7 @@ Recommended setup:
 
 - `Governance Safe (4/7)` -> `Governance Timelock (72h)` -> `DEFAULT_ADMIN_ROLE`
 - `Governance Safe (4/7)` -> `Upgrade Timelock (72h)` -> `UPGRADE_ROLE`
-- `Admin Safe (4/7)` -> `Admin Timelock (72h)` -> `ADMIN_ROLE`
+- `Admin Safe (4/7)` -> `Admin Timelock (1800s / 30m)` -> `ADMIN_ROLE`
 - `Token Safe (4/7)` -> `TOKEN_ROLE`
 - `Validator Safe (4/7)` -> `VALIDATOR_ROLE`
 - `Emergency Guardian Safe (3/5)` -> `PAUSE_ROLE`
@@ -100,9 +100,9 @@ Current deployed and verified Arbitrum One addresses:
 
 - `Role Safe / Governance Safe / Admin Safe`: `0x6F7212fa867D5C33cdad5Ed0522e2A29ddE6dD3a`
 - `Governance Timelock` (`DEFAULT_ADMIN_ROLE`): `0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6`
-- `Admin Timelock` (`ADMIN_ROLE`): `0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495`
+- `Admin Timelock` (`ADMIN_ROLE`): `0x7A1b6891269Ed1699F93e25296a6e23d6f4F7386`
 - `Upgrade Timelock` (`UPGRADE_ROLE`): `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
-- All Timelock delays: `259200` seconds (72 hours)
+- Timelock delays: Admin `1800` seconds (30 minutes); Governance/Upgrade `259200` seconds (72 hours)
 
 # Roles
 
@@ -125,7 +125,7 @@ Current deployed and verified Arbitrum One addresses:
 
 ## ADMIN_ROLE
 
-- Holder: `Admin Timelock (72h)`
+- Holder: `Admin Timelock (1800s / 30m)`
 - Upstream threshold: `Admin Safe 4/7`
 - Hash ID: `0xa49807205ce4d355092ef5a8a18f56e8913cf4a201fbe287825b095693c21775`
 - Responsibilities:
@@ -183,9 +183,9 @@ This section only explains how to fill and verify transactions in the Safe web U
 
 - Vault Proxy: `0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE`
 - Governance Timelock: `0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6`
-- Admin Timelock: `0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495`
+- Admin Timelock: `0x7A1b6891269Ed1699F93e25296a6e23d6f4F7386`
 - Upgrade Timelock: `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
-- Current delay for each Timelock: `259200` seconds (72 hours).
+- Current delays: Admin `1800` seconds (30 minutes); Governance/Upgrade `259200` seconds (72 hours).
 
 Important: Timelock addresses must come from the final values in `ops/config/set-roles.json`. If a Timelock field is still `0x0000000000000000000000000000000000000000`, that Timelock has not been deployed or written back yet, and the corresponding operation must not be submitted.
 
@@ -235,7 +235,7 @@ Timelocked actions have two calldata layers:
    - `data`: inner calldata
    - `predecessor`: `0x0000000000000000000000000000000000000000000000000000000000000000` if there is no dependency
    - `salt`: the `bytes32` salt recorded in the Lark approval
-   - `delay`: `259200`
+   - `delay`: `1800` for `ADMIN_ROLE`; `259200` for `DEFAULT_ADMIN_ROLE` and `UPGRADE_ROLE`
 6. On the Safe `Review` page, copy `Data` and decode the outer calldata in the checker.
 7. Verify outer `target` is Vault Proxy, outer `data` exactly equals inner calldata, and `salt` / `delay` match the approval record.
 

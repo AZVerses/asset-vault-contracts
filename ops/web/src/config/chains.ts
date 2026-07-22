@@ -24,8 +24,8 @@ export const chains: ChainConfig[] = [
     chainId: 42161,
     vaultProxy: "0x91Ba525861c16AA8Cd4D6974E4058cc846f42eBE",
     adminTimelock: {
-      address: "0xb9CC7c15BD18FBBE1a8c0F3F49A4F3D10f193495",
-      delaySeconds: 259200,
+      address: "0x7A1b6891269Ed1699F93e25296a6e23d6f4F7386",
+      delaySeconds: 1800,
     },
     governanceTimelock: {
       address: "0xe78A0079071f4C4e7A9280dBd6b3476Ac6Bf85c6",
@@ -35,7 +35,7 @@ export const chains: ChainConfig[] = [
       address: "0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c",
       delaySeconds: 259200,
     },
-    addressNote: "Arbitrum One production addresses; all Timelocks use a 72h delay.",
+    addressNote: "Arbitrum One production addresses; Admin Timelock is 30m, Governance/Upgrade are 72h.",
   },
   {
     id: "arb-sepolia",

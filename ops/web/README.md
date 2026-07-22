@@ -33,5 +33,6 @@ npm run build
 - Output directory: `dist`
 
 Arbitrum One is configured with the deployed production Vault Proxy and three
-72-hour Timelocks. Arbitrum Sepolia and Ethereum Sepolia remain placeholder
-configurations until those deployments are completed.
+Timelocks: Admin `1800s`, Governance `259200s`, and Upgrade `259200s`.
+Arbitrum Sepolia and Ethereum Sepolia remain placeholder configurations until
+those deployments are completed.
