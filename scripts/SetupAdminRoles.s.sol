@@ -2,6 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
+import {VmSafe} from "forge-std/Vm.sol";
 import {TimelockController} from "@openzeppelin/contracts/governance/TimelockController.sol";
 import {AssetVault} from "../src/AssetVault.sol";
 
@@ -12,12 +13,15 @@ import {AssetVault} from "../src/AssetVault.sol";
 ///
 /// Timelock role config:
 ///   roles = proposer candidates; the vault role is granted only to the
-///   TimelockController. `timelockAddress` is optional for first deployment;
-///   write the emitted address back to JSON before rerunning the script.
-///   The executor defaults to the current script caller, and the canceller
+///   configured TimelockController. `timelockAddress` is required. The
+///   executor defaults to the current script caller, and the canceller
 ///   defaults to the proposer, matching OpenZeppelin TimelockController v5.6.1.
+///   Existing proposer, canceller, and executor members are reconciled from
+///   RoleGranted/RoleRevoked logs, so stale members are revoked.
 contract SetupAdminRoles is Script {
     string internal constant CONFIG_PATH = "/scripts/configs/roles.json";
+    bytes32 internal constant ROLE_GRANTED_EVENT = keccak256("RoleGranted(bytes32,address,address)");
+    bytes32 internal constant ROLE_REVOKED_EVENT = keccak256("RoleRevoked(bytes32,address,address)");
 
     struct RoleConfig {
         string roleName;
@@ -73,24 +77,35 @@ contract SetupAdminRoles is Script {
         address executor = config.timelockExecutor == address(0) ? caller : config.timelockExecutor;
         address timelockAddress = config.timelockAddress;
         TimelockController timelock;
-
         if (timelockAddress == address(0)) {
+            require(
+                vm.envOr("DEPLOY_TIMELOCK", false),
+                "timelockAddress is required (or set DEPLOY_TIMELOCK=true for first deployment)"
+            );
             address[] memory proposers = new address[](1);
             proposers[0] = proposer;
             address[] memory executors = new address[](1);
             executors[0] = executor;
             timelock = new TimelockController(config.timelockDelay, proposers, executors, caller);
             timelockAddress = address(timelock);
-            console.log("Deployed TimelockController for role:", config.roleName, timelockAddress);
+            console.log("Deployed TimelockController; verify this address:", timelockAddress);
         } else {
             require(timelockAddress.code.length > 0, "timelockAddress has no code");
             timelock = TimelockController(payable(timelockAddress));
             require(timelock.getMinDelay() == config.timelockDelay, "timelock delay mismatch");
         }
 
-        _ensureTimelockRole(timelock, timelock.PROPOSER_ROLE(), proposer, caller);
-        _ensureTimelockRole(timelock, timelock.CANCELLER_ROLE(), canceller, caller);
-        _ensureTimelockRole(timelock, timelock.EXECUTOR_ROLE(), executor, caller);
+        _syncTimelockRole(timelock, timelock.PROPOSER_ROLE(), proposer, caller);
+        _syncTimelockRole(timelock, timelock.CANCELLER_ROLE(), canceller, caller);
+        _syncTimelockRole(timelock, timelock.EXECUTOR_ROLE(), executor, caller);
+
+        // TimelockController is self-administered by design. The constructor
+        // grants the deployer a bootstrap DEFAULT_ADMIN_ROLE; remove it after
+        // the configured sub-roles have been reconciled.
+        if (timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), caller)) {
+            timelock.renounceRole(timelock.DEFAULT_ADMIN_ROLE(), caller);
+            console.log("Renounced bootstrap Timelock admin:", caller);
+        }
 
         if (!vault.hasRole(role, timelockAddress)) {
             vault.grantRole(role, timelockAddress);
@@ -100,10 +115,79 @@ contract SetupAdminRoles is Script {
         }
     }
 
-    function _ensureTimelockRole(TimelockController timelock, bytes32 role, address account, address caller) internal {
-        if (timelock.hasRole(role, account)) return;
-        require(timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), caller), "caller cannot manage timelock roles");
-        timelock.grantRole(role, account);
+    function _syncTimelockRole(TimelockController timelock, bytes32 role, address expected, address caller) internal {
+        address[] memory candidates = _timelockRoleCandidates(address(timelock), role);
+        bool needsChange = !timelock.hasRole(role, expected);
+        for (uint256 i = 0; i < candidates.length; ++i) {
+            address candidate = candidates[i];
+            if (candidate != expected && timelock.hasRole(role, candidate)) {
+                needsChange = true;
+            }
+        }
+
+        if (!needsChange) {
+            console.log("Timelock role matches:", expected);
+            return;
+        }
+
+        require(
+            timelock.hasRole(timelock.DEFAULT_ADMIN_ROLE(), caller),
+            "caller cannot reconcile timelock roles"
+        );
+        for (uint256 i = 0; i < candidates.length; ++i) {
+            address candidate = candidates[i];
+            if (candidate != expected && timelock.hasRole(role, candidate)) {
+                timelock.revokeRole(role, candidate);
+                console.log("Revoked stale Timelock role member:", candidate);
+            }
+        }
+        timelock.grantRole(role, expected);
+        console.log("Granted Timelock role member:", expected);
+    }
+
+    function _timelockRoleCandidates(address timelock, bytes32 role)
+        internal
+        view
+        returns (address[] memory members)
+    {
+        bytes32[] memory grantTopics = new bytes32[](1);
+        grantTopics[0] = ROLE_GRANTED_EVENT;
+        bytes32[] memory revokeTopics = new bytes32[](1);
+        revokeTopics[0] = ROLE_REVOKED_EVENT;
+
+        VmSafe.EthGetLogs[] memory grants = vm.eth_getLogs(0, block.number, timelock, grantTopics);
+        VmSafe.EthGetLogs[] memory revokes = vm.eth_getLogs(0, block.number, timelock, revokeTopics);
+        address[] memory candidates = new address[](grants.length + revokes.length);
+        uint256 count;
+
+        count = _collectTimelockRoleCandidates(grants, role, candidates, count);
+        count = _collectTimelockRoleCandidates(revokes, role, candidates, count);
+
+        members = new address[](count);
+        for (uint256 i = 0; i < count; ++i) {
+            members[i] = candidates[i];
+        }
+    }
+
+    function _collectTimelockRoleCandidates(
+        VmSafe.EthGetLogs[] memory logs,
+        bytes32 role,
+        address[] memory candidates,
+        uint256 count
+    ) internal pure returns (uint256) {
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics.length < 3 || logs[i].topics[1] != role) continue;
+            address candidate = address(uint160(uint256(logs[i].topics[2])));
+            bool seen;
+            for (uint256 j = 0; j < count; ++j) {
+                if (candidates[j] == candidate) {
+                    seen = true;
+                    break;
+                }
+            }
+            if (!seen) candidates[count++] = candidate;
+        }
+        return count;
     }
 
     function _readRole(string memory json, uint256 index) internal view returns (RoleConfig memory config) {
@@ -165,7 +249,7 @@ contract SetupAdminRoles is Script {
         return vm.keyExistsJson(json, path) ? vm.parseJsonAddress(json, path) : defaultValue;
     }
 
-    function _vault() internal returns (AssetVault vault) {
+    function _vault() internal view returns (AssetVault vault) {
         vault = AssetVault(payable(vm.envAddress("VAULT_ADDRESS")));
         require(address(vault).code.length > 0, "VAULT_ADDRESS has no code");
     }

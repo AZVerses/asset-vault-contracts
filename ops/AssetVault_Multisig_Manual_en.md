@@ -104,6 +104,17 @@ Current deployed and verified Arbitrum One addresses:
 - `Upgrade Timelock` (`UPGRADE_ROLE`): `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
 - Timelock delays: Admin `1800` seconds (30 minutes); Governance/Upgrade `259200` seconds (72 hours)
 
+`TimelockController` has no `owner()`. Its effective administrator is
+`DEFAULT_ADMIN_ROLE`: the Timelock itself always holds it, while the constructor's
+bootstrap admin is only for initial setup. `SetupAdminRoles` revokes that bootstrap
+admin after synchronizing proposer/canceller/executor, leaving the Timelock
+self-administered through scheduled self-calls.
+The current chain check shows that Admin Timelock still has the deployer
+`0x8A04473C3Fa9f9C159717f9eC7731Fde056828D1` as a bootstrap admin; Governance and
+Upgrade Timelocks currently have only the respective Timelock itself as
+`DEFAULT_ADMIN_ROLE`. Rerunning setup will leave Admin Timelock self-administered as
+well.
+
 # Roles
 
 ## DEFAULT_ADMIN_ROLE

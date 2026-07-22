@@ -104,6 +104,14 @@ Arbitrum One 当前已部署并验证的地址：
 - `Upgrade Timelock` (`UPGRADE_ROLE`): `0xAA5A98c2b6340b3d05Bc63ef578f1bc330100f3c`
 - Timelock delays: Admin `1800` seconds (30 minutes); Governance/Upgrade `259200` seconds (72 hours)
 
+`TimelockController` 没有 `owner()`。它的有效管理员是 `DEFAULT_ADMIN_ROLE`：Timelock
+自身始终拥有该角色，部署时的 bootstrap admin 只用于初始化配置；`SetupAdminRoles`
+完成 proposer/canceller/executor 同步后会撤销 bootstrap admin。之后 Timelock 通过
+自身排队并执行的操作自管理。
+当前链上检查显示：Admin Timelock 仍有 deployer `0x8A04473C3Fa9f9C159717f9eC7731Fde056828D1`
+这个 bootstrap admin；Governance/Upgrade Timelock 目前只有各自 Timelock 自身拥有
+`DEFAULT_ADMIN_ROLE`。重新运行 setup 后，Admin Timelock 也会只保留自身。
+
 # Roles
 
 ## DEFAULT_ADMIN_ROLE

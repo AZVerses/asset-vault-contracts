@@ -474,6 +474,28 @@ textarea {
   word-break: break-word;
 }
 
+.decoded-details {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-left: 2px solid rgba(134, 209, 188, 0.42);
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.decoded-detail {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.32fr) minmax(0, 1fr);
+  gap: 10px;
+  line-height: 1.45;
+}
+
+.decoded-detail code {
+  color: var(--soft);
+  overflow-wrap: anywhere;
+}
+
 .compact-box {
   max-height: 220px;
 }

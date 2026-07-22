@@ -54,13 +54,30 @@ cp scripts/configs/roles.example.json scripts/configs/roles.json
 
 The example addresses are placeholders and must be replaced before broadcasting.
 
-For a timelocked role, `roles` are proposer candidates and the vault role is granted to
-the `TimelockController`; proposer defaults to the first entry, canceller defaults to
-the proposer, and executor defaults to the current setup caller. An existing
-`timelockAddress` must use the configured delay; a zero address causes a new controller
-to be deployed and its emitted address must be written back to the JSON before rerunning.
+For a timelocked role, `timelockAddress` is required and must point to deployed
+bytecode. `roles` are proposer candidates; proposer defaults to the first entry,
+canceller defaults to the proposer, and executor defaults to the current setup caller.
+The setup script reconciles the configured proposer, canceller, and executor against
+the Timelock's `RoleGranted` / `RoleRevoked` event history and revokes stale members.
+For a first deployment only, set `DEPLOY_TIMELOCK=true`; copy the emitted address into
+the config and run the broadcast with `--verify` so the new controller is verified.
+
+`TimelockController` has no `owner()` function. Its effective administrator is
+`DEFAULT_ADMIN_ROLE`; OpenZeppelin grants that role to the Timelock itself and to the
+optional constructor bootstrap admin. `SetupAdminRoles` renounces the bootstrap admin
+after synchronization, leaving the Timelock self-administered. Proposer, canceller,
+and executor are separate roles.
 The controller follows OpenZeppelin Contracts v5.6.1 `TimelockController` semantics:
 <https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v5.6.1/contracts/governance/TimelockController.sol>.
+
+When deploying a new Timelock, use:
+
+```bash
+DEPLOY_TIMELOCK=true forge script scripts/SetupAdminRoles.s.sol:SetupAdminRoles \
+  --rpc-url "$RPC_URL" --broadcast --verify \
+  --verifier etherscan --etherscan-api-key "$ETHERSCAN_API_KEY" \
+  --verifier-url 'https://api.etherscan.io/v2/api?chainid=42161' --chain-id 42161
+```
 
 The contract is UUPS-upgradeable and built around role-based access control plus validator quorum verification.
 

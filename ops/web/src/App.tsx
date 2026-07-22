@@ -13,7 +13,12 @@ import {
 type FormState = Record<string, string | boolean | ValidatorInput[]>;
 type TimelockMode = "schedule" | "execute" | "cancel";
 type InteractionMode = "encode" | "decode";
-type DisplayRow = { label: string; value: string; copyable?: boolean };
+type DisplayRow = {
+  label: string;
+  value: string;
+  copyable?: boolean;
+  details?: Array<{ label: string; value: string }>;
+};
 
 const initialValidatorRows = (): ValidatorInput[] => [
   { signer: "", power: "" },
@@ -309,11 +314,47 @@ const App = () => {
         String(decoded[3]),
         salt,
       );
+      const dataRow: DisplayRow = { label: "data", value: data, copyable: true };
+      try {
+        let innerOperation: OperationDef | undefined;
+        let innerDecoded: ReturnType<typeof decodeFunctionData> | undefined;
+        for (const candidate of operations) {
+          try {
+            innerDecoded = decodeFunctionData(candidate.abiJson, candidate.functionName, data);
+            innerOperation = candidate;
+            break;
+          } catch {
+            // Try the next registered AssetVault function selector.
+          }
+        }
+        if (!innerOperation || !innerDecoded) {
+          throw new Error("unknown AssetVault calldata");
+        }
+        dataRow.details = [
+          {
+            label: "vault target",
+            value:
+              String(decoded[0]).toLowerCase() === chain.vaultProxy.toLowerCase()
+                ? "matches selected Vault Proxy"
+                : `mismatch: expected ${chain.vaultProxy}`,
+          },
+          { label: "function", value: innerOperation.functionSignature },
+          ...innerOperation.params.map((param, index) => ({
+            label: param.name,
+            value: formatDecodedValue(innerDecoded[index]),
+          })),
+        ];
+      } catch {
+        dataRow.details = [
+          { label: "decode", value: "Cannot decode with the selected AssetVault operation ABI." },
+        ];
+      }
+
       const rows: DisplayRow[] = [
         { label: "To Address", value: timelockTarget, copyable: true },
         { label: "target", value: formatDecodedValue(decoded[0]), copyable: true },
         { label: "value", value: formatDecodedValue(decoded[1]), copyable: true },
-        { label: "data", value: data, copyable: true },
+        dataRow,
         { label: "predecessor", value: formatDecodedValue(decoded[3]), copyable: true },
         { label: "salt", value: salt, copyable: true },
         ...(timelockAction === "schedule"
@@ -321,22 +362,6 @@ const App = () => {
           : []),
         { label: "operation id", value: operationIdHash, copyable: true },
       ];
-
-      try {
-        const innerDecoded = decodeFunctionData(operation.abiJson, operation.functionName, data);
-        rows.push(
-          ...operation.params.map((param, index) => ({
-            label: param.name,
-            value: formatDecodedValue(innerDecoded[index]),
-            copyable: true,
-          })),
-        );
-      } catch {
-        rows.push({
-          label: "data decode",
-          value: "Cannot decode data with the selected operation ABI.",
-        });
-      }
 
       return { rows, error: "" };
     } catch (error) {
@@ -759,6 +784,16 @@ const DisplayRows = ({
             ) : null}
           </div>
           <pre>{row.value}</pre>
+          {row.details ? (
+            <div className="decoded-details" aria-label={`${row.label} decoded parameters`}>
+              {row.details.map((detail) => (
+                <div className="decoded-detail" key={`${detail.label}-${detail.value}`}>
+                  <span>{detail.label}</span>
+                  <code>{detail.value}</code>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       ))}
     </div>
